@@ -110,7 +110,7 @@ class GdbSession:
         full_args.extend(self.args)
         self.session_ctrl = GdbController(full_args)
 
-    def remote_attach(self):
+    def remote_attach(self, prerun_cmds: Optional[List[dict]] = None):
         print("start remote attach")
         if not self.remote_gdbserver:
             eprint("Remote gdbserver not initialized")
@@ -119,8 +119,6 @@ class GdbSession:
         self.remote_gdbserver.connect()
         command = ["gdbserver", f":{self.remote_port}", "--attach", f"{str(self.attach_pid)}"]
         output = self.remote_gdbserver.execute_command_async(command)
-        print(output)
-        print("finish attach")
         self.session_ctrl = GdbController(
             ["gdb", self.get_mi_version_arg(), "-ex",
              f"target remote {self.remote_host}:{self.remote_port}"]
@@ -140,7 +138,7 @@ class GdbSession:
             for cmd in prerun_cmds:
                 full_args.append("-ex")
                 full_args.append(cmd["command"])
-        full_args.extend([ "-ex", f"target remote :{self.remote_port}" ])
+        full_args.extend([ "-ex", f"target remote {self.remote_host}:{self.remote_port}" ])
         self.session_ctrl = GdbController(full_args)
         # self.session_ctrl.write(f"target remote :{self.remote_port}", read_response=False)
         # print(response)

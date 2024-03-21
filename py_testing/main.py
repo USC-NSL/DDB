@@ -6,9 +6,8 @@ from pprint import pprint
 from gdb_manager import GdbManager
 from yaml import safe_load, YAMLError
 from gdb_session import GdbMode, GdbSessionConfig, StartMode
-from gdbserver_starter import KubeRemoteSeverClient, SSHRemoteServerCred, SSHRemoteSeverClient
+from gdbserver_starter import KubeRemoteSeverClient, SSHRemoteServerCred, SSHRemoteServerClient
 from utils import *
-from kubernetes import config as kubeconfig, client as kubeclient
 import sys
 import argparse
 
@@ -34,10 +33,12 @@ def main():
         ) and component["mode"] == "remote" else GdbMode.LOCAL
         if sessionConfig.gdb_mode == GdbMode.REMOTE:
             remote_cred = SSHRemoteServerCred(
+                port=sessionConfig.remote_port,
+                bin=component["bin"],
                 hostname=component["cred"]["hostname"],
                 username=component["cred"]["user"],
             )
-            sessionConfig.remote_gdbserver = SSHRemoteSeverClient(
+            sessionConfig.remote_gdbserver = SSHRemoteServerClient(
                 cred=remote_cred)
         sessionConfig.tag = component.get("tag", None)
         sessionConfig.start_mode = component.get("startMode", StartMode.Binary)
@@ -163,6 +164,8 @@ def bootFromNuConfig():
             os._exit(130)
 
 def bootServiceWeaverKube():
+    from kubernetes import config as kubeconfig, client as kubeclient
+
     kubeconfig.load_incluster_config()
     clientset = kubeclient.CoreV1Api()
     global gdb_manager, config_data
