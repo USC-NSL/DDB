@@ -5,17 +5,11 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "type": "by-gdb",
-      "request": "launch",
-      "name": "Launch(gdb)",
-      "program": "${fileBasenameNoExtension}",
-      "cwd": "${workspaceRoot}"
-    },
-    {
       "type": "ddb",
       "request": "launch",
       "name": "Launch(DDB)",
-      "program": "${workspaceFolder}/${command:AskForProgramName}"
+      "program": "${command:AskForProgramName}",
+      "configFile": "${command:AskForDDBConfigFile}"
     }
   ]
 }

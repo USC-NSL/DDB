@@ -14,10 +14,16 @@ import { DistDebug } from './DistDebug';
 export function activateDistDebug(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(vscode.commands.registerCommand('extension.ddb.getProgramName', config => {
-		return vscode.window.showInputBox({
-			placeHolder: "Please enter the name of the file in the workspace folder",
-			value: "main.cpp"
-		});
+		return vscode.window.showOpenDialog({canSelectMany: false, openLabel: "Program file"})
+      .then(file => {
+        return file[0].fsPath;
+      });
+	}));
+	context.subscriptions.push(vscode.commands.registerCommand('extension.ddb.getDDBConfigFile', config => {
+		return vscode.window.showOpenDialog({canSelectMany: false, openLabel: "YAML Config file"})
+      .then(file => {
+        return file[0].fsPath;
+      });
 	}));
 
 	// register a configuration provider for 'ddb' debug type

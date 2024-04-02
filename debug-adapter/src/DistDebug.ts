@@ -355,6 +355,7 @@ export class DistDebug extends DebugSession {
   }
 
   protected async launchRequest(response: DebugProtocol.LaunchResponse, _args: DebugProtocol.LaunchRequestArguments) {
+    console.log("org args:", _args);
     const args = _args as ILaunchRequestArguments;
     this.initDebugSession();
     // vscode.commands.executeCommand('workbench.panel.repl.view.focus');
@@ -368,11 +369,15 @@ export class DistDebug extends DebugSession {
     // make sure to 'Stop' the buffered logging if 'trace' is not set
     // wait until configuration has finished (and configurationDoneRequest has been called)
     try {
+      args.cwd = "";
       await this.ddbServer.startDDB(args);
+      console.log("Started DDB");
       await this.waitForConfingureDone();
+      console.log("Configuration done");
       //must wait for configure done. It will get error args without this.
       //await this._startDone.wait(2000);
       await this.ddbServer.waitForStart();
+      console.log("DDB start confirmed");
     } catch (error) {
       console.log("Caught error while launching debugger:", error);
       this.sendEvent(new TerminatedEvent(false));
@@ -391,7 +396,9 @@ export class DistDebug extends DebugSession {
           });
       }
     }
-    // start the program 
+
+    // // WE DONT SET EXECUTABLE FILE HERE. WE SET IT IN THE CONFIG FILE. THIS IS JUST TO OPEN IT IN THE VS CODE
+    // // start the program 
     let ret = await this.ddbServer.setExecutableFile(args.program)
       .catch((e) => {
 
@@ -400,6 +407,7 @@ export class DistDebug extends DebugSession {
         this.printToDebugConsole(e.message, EMsgType.error);
         return 1;
       }) as number;
+    console.log("Done setting executable");
 
     if (ret > 0) {
       return;
@@ -408,93 +416,24 @@ export class DistDebug extends DebugSession {
     if (args.programArgs) {
       await this.ddbServer.setInferiorArguments(args.programArgs);
     }
-    console.log("args.remote?.enabled:", args.remote?.enabled);
-    if (args.remote?.enabled) {
-      if (!args.remote.address) {
-        vscode.window.showErrorMessage("Invalid remote addr.");
-      }
-      let mode: string = args.remote.mode === undefined ? 'remote' : args.remote.mode;
-      if (mode === 'remote') {
-        let result = await this.ddbServer.connectToRemoteTargetEx(args.remote.address)
-          .catch((e) => {
-            this.printToDebugConsole(e.message, EMsgType.error);
-            vscode.window.showErrorMessage(e.message);
-            return 1;
-          }) as number; // Add type assertion here
-        if (result > 0) {
-          this.sendEvent(new TerminatedEvent(false));
-          return;
-        }
-        // resumeInferior does not run with any custom options so it is same as resumeAllThreads
-        this.ddbServer.resumeAllThreads();
-        this.sendResponse(response);
-        return;
-      }
-      else if (mode === 'extended-remote') {
-        let result = await this.ddbServer.connectToRemoteTargetEx(args.remote.address, mode)
-          .catch((e) => {
-            this.printToDebugConsole(e.message, EMsgType.error);
-            vscode.window.showErrorMessage(e.message);
-            return 1;
-          }) as number;
-        if (result > 0) {
-          this.sendEvent(new TerminatedEvent(false));
-          return;
-        }
-        if (args.remote.transfer) {
-          this.printToDebugConsole("\n");
-          for (const trans of args.remote.transfer) {
 
-            let id = "put" + trans.from;
-            const startEvent: DebugProtocol.ProgressStartEvent = new ProgressStartEvent(id, `upload ${trans.from}`);
-            startEvent.body.cancellable = false;
-            this.sendEvent(startEvent);
-            this.printToDebugConsole(`uploading : ${trans.from}\n`, EMsgType.info2);
-
-            let endMessage = '`file uploaded : ${trans.from}';
-
-            await this.ddbServer.targetFilePut(trans.from, trans.to).catch((e) => {
-              vscode.window.showErrorMessage(e.message);
-              this.sendEvent(new ProgressEndEvent(id, e.message));
-            }).then(() => {
-              this.printToDebugConsole(`file uploaded : ${trans.from}\n`, EMsgType.info2);
-              this.sendEvent(new ProgressEndEvent(id, endMessage));
-            }
-            );
-          }
-        }
+    // lang will be cpp or go
+    // if (this.language == "auto") {
+    //   let checklang = (out: string) => {
+    //     if (out.indexOf('language') > 0) {
+    //       let m = out.match('currently (.*)?"');
+    //       if (m !== null) {
+    //         this.language = m[1];
+    //       }
+    //       this.ddbServer.off(dbg.EVENT_DBG_CONSOLE_OUTPUT, checklang);
+    //     }
+    //   };
+    //   this.ddbServer.on(dbg.EVENT_DBG_CONSOLE_OUTPUT, checklang);
+    //   await this.ddbServer.execNativeCommand('show language');
 
 
-        let execfile = args.remote.execfile ? args.remote.execfile : args.program;
-        await this.ddbServer.execNativeCommand(`set remote exec-file ${execfile}`).catch((e) => {
-          vscode.window.showErrorMessage("Failed to start the debugger." + e.message);
-          this.sendEvent(new TerminatedEvent(false));
-          return 1;
-        });;
-
-      } else {
-        vscode.window.showErrorMessage('Invalid remote mode.');
-        this.sendEvent(new TerminatedEvent(false));
-        return;
-      }
-    }
-
-    if (this.language == "auto") {
-      let checklang = (out: string) => {
-        if (out.indexOf('language') > 0) {
-          let m = out.match('currently (.*)?"');
-          if (m !== null) {
-            this.language = m[1];
-          }
-          this.ddbServer.off(dbg.EVENT_DBG_CONSOLE_OUTPUT, checklang);
-        }
-      };
-      this.ddbServer.on(dbg.EVENT_DBG_CONSOLE_OUTPUT, checklang);
-      await this.ddbServer.execNativeCommand('show language');
-
-
-    }
-
+    // }
+    console.log("Starting all inferiors");
     await this.ddbServer.startAllInferiors(args.stopAtEntry)
       .catch((e) => {
         this.printToDebugConsole(e.message, EMsgType.error);
@@ -511,6 +450,7 @@ export class DistDebug extends DebugSession {
 
   protected async setBreakPointsRequest(response: DebugProtocol.SetBreakpointsResponse, args: DebugProtocol.SetBreakpointsArguments): Promise<void> {
     // called by vscode when the user tries to set a breakpoint
+    console.log("VSCode requested breakpoints");
 
     // confirm that the ddb is running
     await this.ddbServer.waitForStart();
@@ -543,6 +483,7 @@ export class DistDebug extends DebugSession {
 
     const clientLines = args.breakpoints || [];
     const actualBreakpoints = await Promise.all(clientLines.map(async l => {
+      console.log("Adding breakpoint----")
       let bk = await this.ddbServer.addBreakpoint(srcpath + ":" + this.convertClientLineToDebugger(l.line), {
         isPending: true,
         condition: l.condition
@@ -553,10 +494,24 @@ export class DistDebug extends DebugSession {
       bp.verified = true;
       bp.id = bk.id;
       return bp;
-    }));
+    })).then(res => {
+      console.log("All promises resolved");
+      return res;
+    });
     this._breakPoints.set(srcpath, actualBreakpoints);
+    console.log("::::::::isPause:", isPause);
     if (isPause)
       this.ddbServer.resumeAllThreads();
+    else {
+      // start all inferiors
+      console.log("Starting all inferiors after setting all breakpoints");
+      await this.ddbServer.startAllInferiors()
+        .catch((e) => {
+          this.printToDebugConsole(e.message, EMsgType.error);
+          vscode.window.showErrorMessage("Failed to start the debugger." + e.message);
+          this.sendEvent(new TerminatedEvent(false));
+        });
+    }
 
     response.body = {
       breakpoints: actualBreakpoints

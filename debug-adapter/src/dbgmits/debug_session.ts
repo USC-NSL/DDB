@@ -138,8 +138,23 @@ export default class DebugSession extends events.EventEmitter {
       input: inStream,
       output: null
     });
-    this.lineReader.on('line', (line) => {
-      console.log("Got line from command:", line);
+    this.lineReader.on('line', (line: string) => {
+      console.log("reading line:", line);
+      if (line.match(/^\s*startup command:/)) {
+        console.log("Adding empty line");
+        for (let i = 0; i < 10; i++)
+          this.executeCommand("\n", null, true);
+        return;
+      }
+      if (line.match(/^\(gdb\)\s*/)) {
+        // pop command from queue and send to debugger
+        console.log(`\n\n\nOMG OMG OMG!!! I am asked for a command. I have ${this.cmdQueue.length}. running`, this.cmdQueue[0]);
+        if (this.cmdQueue.length) {
+          const cmd = this.cmdQueue.shift();
+          this.sendCommandToDebugger(cmd);
+        }
+        return;
+      }
       try {
         this.parseDebbugerOutput(line);
       } catch (error) {
@@ -233,7 +248,12 @@ export default class DebugSession extends events.EventEmitter {
 
     try {
       var result = parser.parse(line);
-    } catch (err) {
+    } catch (err: any) {
+      // match regex with error
+      if(err?.message?.match(/^\%SKIP LINE AND PRINT\%/)){
+        this.emit("SKIP_LINE_AND_PRINT", line)
+        return;
+      }
       if (this.logger) {
         this.logger.error(err + 'Attempted to parse: ->' + line + '<-');
       }
@@ -284,10 +304,11 @@ export default class DebugSession extends events.EventEmitter {
         break;
     }
 
-    // if a command was popped from the qeueu we can send through the next command
-    if (cmdQueuePopped && (this.cmdQueue.length > 0)) {
-      this.sendCommandToDebugger(this.cmdQueue[0]);
-    }
+    // // if a command was popped from the qeueu we can send through the next command
+    // // dont send from here. keep listening and send cmd on lineReader
+    // if (cmdQueuePopped && (this.cmdQueue.length > 0)) {
+    //   this.sendCommandToDebugger(this.cmdQueue[0]);
+    // }
   }
 
   /**
@@ -307,6 +328,7 @@ export default class DebugSession extends events.EventEmitter {
     if (this.logger) {
       this.logger.log(cmdStr);
     }
+    console.log("Sending command to debugger:::: ", cmdStr);
     this.outStream.write(cmdStr + '\n');
   }
 
@@ -317,12 +339,17 @@ export default class DebugSession extends events.EventEmitter {
    * immediately, otherwise it will be dispatched after all the previously queued commands are
    * processed.
    */
-  private enqueueCommand(command: DebugCommand): void {
-    this.cmdQueue.push(command);
-
-    if (this.cmdQueue.length === 1) {
-      this.sendCommandToDebugger(this.cmdQueue[0]);
+  private enqueueCommand(command: DebugCommand, immediate: boolean = false): void {
+    if (immediate) {
+      this.sendCommandToDebugger(command);
+      return;
     }
+    this.cmdQueue.push(command);
+    // commands are available here. but only send to debugger when debugger output has (gdb )
+
+    // if (this.cmdQueue.length === 1) {
+    //   this.sendCommandToDebugger(this.cmdQueue[0]);
+    // }
   }
 
   /**
@@ -332,10 +359,11 @@ export default class DebugSession extends events.EventEmitter {
    * @param token Token to be prefixed to the command string (must consist only of digits).
    * @returns A promise that will be resolved when the command response is received.
    */
-  public executeCommand(command: string, token?: string): Promise<void> {
+  public executeCommand(command: string, token?: string, immediate?: boolean): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       this.enqueueCommand(
-        new DebugCommand(command, token, (err, data) => { err ? reject(err) : resolve(); })
+        new DebugCommand(command, token, (err, data) => { err ? reject(err) : resolve(); }),
+        immediate
       );
     });
   }
@@ -352,7 +380,6 @@ export default class DebugSession extends events.EventEmitter {
   private getCommandOutput<T>(command: string, token?: string, transformOutput?: (data: any) => T)
     : Promise<T> {
     return new Promise<T>((resolve, reject) => {
-      console.log("Running command:", command, token);
       this.enqueueCommand(
         new DebugCommand(command, token, (err, data) => {
           console.log("Command output as:", data);
@@ -626,7 +653,7 @@ export default class DebugSession extends events.EventEmitter {
    *                    of the main function.
    */
   startAllInferiors(stopAtStart?: boolean): Promise<void> {
-    var fullCmd: string = 'exec-run --all';
+    var fullCmd: string = '-exec-run --all';
     if (stopAtStart) {
       fullCmd = fullCmd + ' --start';
     }
@@ -671,7 +698,7 @@ export default class DebugSession extends events.EventEmitter {
    * @param reverse *(GDB specific)* If `true` the inferiors are executed in reverse.
    */
   resumeAllThreads(reverse: boolean = false): Promise<void> {
-    var fullCmd: string = 'exec-continue --all';
+    var fullCmd: string = '-exec-continue --all';
     if (reverse) {
       fullCmd = fullCmd + ' --reverse';
     }
@@ -1553,7 +1580,7 @@ export default class DebugSession extends events.EventEmitter {
    */
   getThreads(): Promise<IMultiThreadInfo> {
     let fullCmd = '-thread-info';
-    console.log("Running command: " + fullCmd);
+    // console.log("Running command: " + fullCmd);
     return this.getCommandOutput(fullCmd, null, (output: any) => {
       console.log("Result for:", fullCmd, output);
       let currentThreadId: number = parseInt(output['current-thread-id'], 10);

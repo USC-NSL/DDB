@@ -68,7 +68,8 @@
   "activationEvents": [
     "onDebugResolve:mock",
     "onDebugDynamicConfigurations:mock",
-    "onCommand:extension.ddb.getProgramName"
+    "onCommand:extension.ddb.getProgramName",
+    "onCommand:extension.ddb.getDDBConfigFile"
   ],
   "workspaceTrust": {
     "request": "never"
@@ -100,13 +101,18 @@
         "configurationAttributes": {
           "launch": {
             "required": [
-              "program"
+              "configFile"
             ],
             "properties": {
               "program": {
                 "type": "string",
                 "description": "Absolute path to a text file.",
-                "default": "${workspaceFolder}/${command:AskForProgramName}"
+                "default": "${command:AskForProgramName}"
+              },
+              "configFile": {
+                "type": "string",
+                "description": "Absolute path to a yaml config file.",
+                "default": "${command:AskForDDBConfigFile}"
               }
             }
           },
@@ -117,8 +123,8 @@
             "properties": {
               "program": {
                 "type": "string",
-                "description": "Absolute path to a text file.",
-                "default": "${workspaceFolder}/${command:AskForProgramName}"
+                "description": "Absolute path to the program file.",
+                "default": "${command:AskForProgramName}"
               }
             }
           }
@@ -128,7 +134,8 @@
             "type": "ddb",
             "request": "launch",
             "name": "Launch(DDB)",
-            "program": "${workspaceFolder}/${command:AskForProgramName}"
+            "program": "${command:AskForProgramName}",
+            "configFile": "${command:AskForDDBConfigFile}"
           }
         ],
         "configurationSnippets": [
@@ -139,12 +146,14 @@
               "type": "ddb",
               "request": "launch",
               "name": "Launch(DDB)",
-              "program": "^\"\\${workspaceFolder}/\\${command:AskForProgramName}\""
+              "program": "^\"\\${command:AskForProgramName}\"",
+              "configFile": "^\"\\${command:AskForDDBConfigFile}\""
             }
           }
         ],
         "variables": {
-          "AskForProgramName": "extension.ddb.getProgramName"
+          "AskForProgramName": "extension.ddb.getProgramName",
+          "AskForDDBConfigFile": "extension.ddb.getDDBConfigFile"
         }
       }
     ]

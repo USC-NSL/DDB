@@ -111,6 +111,18 @@ export const EVENT_LIB_LOADED: string = 'libload';
   */
 export const EVENT_LIB_UNLOADED: string = 'libunload';
 
+// /**
+//   * Emitted when some console output from the debugger becomes available,
+//   * usually in response to a CLI command.
+//   *
+//   * Listener function should have the signature:
+//   * ~~~
+//   * (output: string) => void
+//   * ~~~
+//   * @event
+//   */
+
+// export const EVENT_DBG_CONSOLE_OUTPUT: string = 'conout';
 /**
   * Emitted when some console output from the debugger becomes available,
   * usually in response to a CLI command.

@@ -129,8 +129,7 @@ peg$SyntaxError.buildMessage = function(expected, found) {
   function describeFound(found) {
     return found ? "\"" + literalEscape(found) + "\"" : "end of input";
   }
-
-  return "Expected " + describeExpected(expected) + " but " + describeFound(found) + " found.";
+  return "%SKIP LINE AND PRINT% Expected " + describeExpected(expected) + " but " + describeFound(found) + " found.";
 };
 
 function peg$parse(input, options) {
@@ -1410,7 +1409,6 @@ function peg$parse(input, options) {
     if (peg$result !== peg$FAILED && peg$currPos < input.length) {
       peg$fail(peg$endExpectation());
     }
-
     throw peg$buildStructuredError(
       peg$maxFailExpected,
       peg$maxFailPos < input.length ? input.charAt(peg$maxFailPos) : null,

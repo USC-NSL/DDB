@@ -11,6 +11,7 @@ export interface ILaunchRequestArguments extends DebugProtocol.LaunchRequestArgu
 	debuggerPath?: string;
 	debuggerArgs?: string[];
 	program: string;
+  configFile: string,
 	programArgs?: string;
 	cwd?: string;
 	commandsBeforeExec?: string[];
@@ -41,6 +42,7 @@ export interface ILaunchRequestArguments extends DebugProtocol.LaunchRequestArgu
 export interface IAttachRequestArguments extends DebugProtocol.AttachRequestArguments {
 	/** An absolute path to the "program" to debug. */
 	program: string;
+	configFile: string;
 	/** Traget process id to attach. */
 	processId: number;
 	debuggerPath?: string;

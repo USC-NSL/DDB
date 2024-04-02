@@ -23,6 +23,8 @@ export declare class DDBSession extends DebugSession {
 }
 
 export class DDBSessionImpl extends DebugSession {
+  // has everything from debug_session.ts
+  // accessible as this.ddbServer in DistDebug.ts
   private target_pid?: number;
   private debuggerProcess?: ChildProcess;
   private major_version!: number;
@@ -32,6 +34,12 @@ export class DDBSessionImpl extends DebugSession {
     super();
     this.on(dbg.EVENT_THREAD_GROUP_STARTED, (e) => {
       this.target_pid = Number.parseInt(e.pid);
+    })
+
+    this.on("SKIP_LINE_AND_PRINT", line => {
+      console.log("Got skip line and printing:", line);
+      // this.printToDebugConsole
+      // this.sendEvent()
     })
   }
 
@@ -53,15 +61,16 @@ export class DDBSessionImpl extends DebugSession {
 
   public async startDDB(args: ILaunchRequestArguments | IAttachRequestArguments) {
 
-    console.log("Starting DDB...");
+    console.log("Starting DDB...", args.configFile);
 
     let debuggerArgs: string[] = args.debuggerArgs ? args.debuggerArgs : [];
     this.target_pid = undefined;
 
-    const debuggerFilename = 'ddb configs/dbg_multithread_print.yaml';
+    const debuggerFilename = 'ddb';
 
-    // debuggerArgs = debuggerArgs.concat(['--interpreter', this.miVersion]);
-    console.log("Starting with:", debuggerFilename, debuggerArgs);
+    debuggerArgs = debuggerArgs.concat([args.configFile]);
+    // debuggerArgs = debuggerArgs.concat(['/home/ubuntu/USC-NSL/distributed-debugger/py_testing/configs/dbg_multithread_print.yaml']);
+
     this.debuggerProcess = spawn(debuggerFilename, debuggerArgs);
     
     let check_version = (out: string) => {
@@ -81,7 +90,6 @@ export class DDBSessionImpl extends DebugSession {
     }
 
     this.on(dbg.EVENT_DBG_CONSOLE_OUTPUT, (out) => {
-      console.log("Checking version...", out);
       check_version(out);
     });
     console.log("Started debugger process: ", this.debuggerProcess)
@@ -155,6 +163,7 @@ export class DDBSessionImpl extends DebugSession {
 
   startInferior(
     options?: { threadGroup?: string; stopAtStart?: boolean }): Promise<void> {
+      console.log("Starting inferior with options:", options);
     if (options?.stopAtStart) {
       if (this.major_version > 7) {
         return this.execNativeCommand('starti');
