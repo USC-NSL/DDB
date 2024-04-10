@@ -1309,6 +1309,11 @@ mocha@^9.2.2:
     yargs-parser "20.2.4"
     yargs-unparser "2.0.0"
 
+moment@^2.30.1:
+  version "2.30.1"
+  resolved "https://registry.npmjs.org/moment/-/moment-2.30.1.tgz"
+  integrity sha512-uEmtNhbDOrWPFS+hdjFCBfy9f2YoyzRpwcl+DqpC6taX21FzsTLQVbMV/W7PzNSX6x/bhC1zA3c2UQ5NzH6how==
+
 ms@2.1.2:
   version "2.1.2"
   resolved "https://registry.npmjs.org/ms/-/ms-2.1.2.tgz"
@@ -1852,6 +1857,11 @@ text-table@^0.2.0:
   version "0.2.0"
   resolved "https://registry.npmjs.org/text-table/-/text-table-0.2.0.tgz"
   integrity sha1-f17oI66AUgfACvLfSoTsP8+lcLQ= sha512-N+8UisAXDGk8PFXP4HAzVR9nbfmVJ3zYLAWiTIoqC5v5isinhr+r5uaO8+7r3BMfuNIufIsA7RdpVgacC2cSpw==
+
+timers-promises@^1.0.1:
+  version "1.0.1"
+  resolved "https://registry.npmjs.org/timers-promises/-/timers-promises-1.0.1.tgz"
+  integrity sha512-u87PAM7pIloXOxGcjqfDRQB72NG8DIVKafVafHgixzlsPlLnZTw9IkiX/WYSAqK1SkRAc6J2I/SUrBiswGvNiA==
 
 tmp@^0.2.1:
   version "0.2.1"

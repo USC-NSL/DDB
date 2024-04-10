@@ -11,6 +11,7 @@ import * as path from 'path';
 import { match } from 'assert';
 import { LogLevel } from '@vscode/debugadapter/lib/logger';
 import { IAttachRequestArguments, ILaunchRequestArguments } from './arguements';
+import * as Templates from './templates';
 
 export declare class DDBSession extends DebugSession {
   constructor(miVersion: string);
@@ -20,6 +21,8 @@ export declare class DDBSession extends DebugSession {
   public attach(pid: number);
   public kill(): Promise<void>;
   public waitForStart(): Promise<void>;
+  public clearBreakpoints(source?: string): Promise<void>;
+  public addBreakpoint(breakpoint: Templates.Breakpoint): Promise<[boolean, Templates.Breakpoint]>;
 }
 
 export class DDBSessionImpl extends DebugSession {
@@ -28,7 +31,10 @@ export class DDBSessionImpl extends DebugSession {
   private target_pid?: number;
   private debuggerProcess?: ChildProcess;
   private major_version!: number;
-  private gdb_arch?: string;
+  private tokenNumber = 1;
+  private tokenHandlers: Map<number, (data: string) => void> = new Map();
+  
+  private breakpoints: Map<Templates.Breakpoint, Number> = new Map();
 
   constructor(private miVersion: string = 'mi') {
     super();
@@ -37,9 +43,24 @@ export class DDBSessionImpl extends DebugSession {
     })
 
     this.on("SKIP_LINE_AND_PRINT", line => {
-      console.log("Got skip line and printing:", line);
+      // console.log("Got skip line and printing:", line);
       // this.printToDebugConsole
       // this.sendEvent()
+    })
+  }
+
+  public runCommand(command: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const token = this.tokenNumber++;
+      // const fullCmd = `${token}-${command}\n`;
+      const fullCmd = `-${command}`;
+      this.tokenHandlers.set(token, (data: string) => {
+        // parse and handle here.
+        console.log("Got data from runCommand:", data);
+        resolve();
+      });
+      console.log("Running command:", fullCmd);
+      this.debuggerProcess.stdin?.write(fullCmd + "\n");
     })
   }
 
@@ -49,6 +70,7 @@ export class DDBSessionImpl extends DebugSession {
         resolve();
       } else {
         this.once(dbg.EVENT_SESSION_STARTED, () => {
+          console.log("\n\n\nCaptured EVENT_SESSION_STARTED\n\n\n");
           resolve();
         });
 
@@ -66,34 +88,23 @@ export class DDBSessionImpl extends DebugSession {
     let debuggerArgs: string[] = args.debuggerArgs ? args.debuggerArgs : [];
     this.target_pid = undefined;
 
-    const debuggerFilename = 'ddb';
+    const debuggerFilename = 'python3.9';
 
+    debuggerArgs = debuggerArgs.concat(["/home/ubuntu/USC-NSL/distributed-debugger/py_testing/main.py"]);
     debuggerArgs = debuggerArgs.concat([args.configFile]);
     // debuggerArgs = debuggerArgs.concat(['/home/ubuntu/USC-NSL/distributed-debugger/py_testing/configs/dbg_multithread_print.yaml']);
 
     this.debuggerProcess = spawn(debuggerFilename, debuggerArgs);
-    
-    let check_version = (out: string) => {
-      if (out.startsWith('GNU gdb')) {
-        let matchs = out.match(/\(GDB\).*?(\d+)/);
-        if (matchs) {
-          this.major_version = Number.parseInt(matchs[1]);
-        }
-      } else if (out.startsWith('This GDB was configured as')) {
-        let matchs = out.match(/This GDB was configured as "(.*?)"/);
-        if (matchs) {
-          this.gdb_arch = matchs[1];
-
-        }
-        this.removeListener(dbg.EVENT_DBG_CONSOLE_OUTPUT, check_version);
-      }
-    }
 
     this.on(dbg.EVENT_DBG_CONSOLE_OUTPUT, (out) => {
-      check_version(out);
+      console.log("EVENT_DBG_CONSOLE_OUTPUT:", out);
+      // check_version(out);
     });
     console.log("Started debugger process: ", this.debuggerProcess)
-    this.start(this.debuggerProcess.stdout!, this.debuggerProcess.stdin!);
+    this.debuggerProcess.stdout?.on('data', this.stdout.bind(this));
+
+
+    // this.start(this.debuggerProcess.stdout!, this.debuggerProcess.stdin!);
     //create terminal and it's tty
     let currentTerminal = vscode.window.terminals.find((value, index, obj) => {
       return value.name === 'DDB';
@@ -105,12 +116,12 @@ export class DDBSessionImpl extends DebugSession {
     let pid = await currentTerminal.processId;
     console.log("Current terminal pid:", pid);
     var tty = '/dev/pts/0';
-    exec(`ps h -o tty -p ${pid}|tail -n 1`, (error, stdout, stderr) => {
-      if (!error) {
-        tty = '/dev/' + stdout;
-      }
-      this.executeCommand(`inferior-tty-set ${tty}`);
-    });
+    // exec(`ps h -o tty -p ${pid}|tail -n 1`, (error, stdout, stderr) => {
+    //   if (!error) {
+    //     tty = '/dev/' + stdout;
+    //   }
+      // this.executeCommand(`inferior-tty-set ${tty}`);
+    // });
 
     this.debuggerProcess.on('error', (error: Error) => {
       vscode.window.showErrorMessage(error.message);
@@ -181,4 +192,51 @@ export class DDBSessionImpl extends DebugSession {
     this.target_pid = pid;
   }
 
+  private stdout(data: Buffer) {
+    const op = data.toString("utf-8");
+    console.log("Got op:", op);
+    this.parseOutput(op);
+  }
+
+  public async addBreakpoint(breakpoint: Templates.Breakpoint): Promise<[boolean, Templates.Breakpoint]> {
+    return new Promise((resolve, reject) => {
+      console.log("Adding breakpoint:", breakpoint);
+      if (this.breakpoints.has(breakpoint)) {
+        return resolve([false, breakpoint]);
+      }
+      const loc = `"${breakpoint.file}:${breakpoint.line}"`;
+      const cmd = `break-insert -f ${loc}`;
+      this.runCommand(cmd);
+
+    })
+  }
+
+  public async clearBreakpoints(source?: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const promises: Promise<void>[] = [];
+      return resolve();
+      const currentBreakpoints = this.breakpoints;
+      this.breakpoints = new Map();
+      currentBreakpoints.forEach((num, bp) => {
+        if (bp.file === source) {
+          // promises.push(this.deleteBreakpoint(num));
+        }
+      })
+    })
+  }
+
+  private async parseOutput(data: string) {
+    const lines = data.split("\n");
+
+    lines.forEach(line => {
+      if (line.match(/^\(gdb\)\s*/)) {
+        if (!this.isStarted) {
+          this.emit(dbg.EVENT_SESSION_STARTED);
+          this.setStarted();
+
+        }
+
+      }
+    })
+  }
 }
