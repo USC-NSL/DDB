@@ -18,10 +18,8 @@ import { DebugProtocol } from '@vscode/debugprotocol';
 import * as iconv from 'iconv-lite';
 import { TerminalEscape, TE_Style } from "./terminalEscape";
 import * as dbg from './dbgmits';
-import * as path from 'path';
-import { DDBSession, DDBSessionImpl } from './DDBSession';
+import { DDBSessionImpl } from './DDBSession';
 import { ILaunchRequestArguments, IAttachRequestArguments } from "./arguements"
-import { Subject } from 'await-notify';
 import fs = require('fs');
 import yaml = require('js-yaml');
 const timers = require('timers-promises');
@@ -43,7 +41,7 @@ export class DistDebug extends DebugSession {
   private _variableHandles = new Handles<string>();
   private _locals: { frame?: dbg.IStackFrameInfo, vars: dbg.IVariableInfo[], watch: dbg.IWatchInfo[] } = { frame: null, vars: [], watch: [] };
 
-  private ddbServer!: DDBSession;
+  private ddbServer!: DDBSessionImpl;
   private _isRunning: boolean = false;
   private _isAttached = false;
   private _breakPoints = new Map<string, DebugProtocol.Breakpoint[]>();
@@ -57,7 +55,7 @@ export class DistDebug extends DebugSession {
   //default charset 
   private defaultStringCharset?: string;
 
-  private _configurationDone = new Subject();
+  private _configurationDone = false;
 
   private _cancellationTokens = new Map<number, boolean>();
 
@@ -93,7 +91,8 @@ export class DistDebug extends DebugSession {
     return new Promise<void>((resolve, reject) => {
       if (this._configurationDone) {
         resolve();
-      } else {
+      }
+      else {
         this.once(EVENT_CONFIG_DOWN, () => {
           resolve();
         });
@@ -162,9 +161,9 @@ export class DistDebug extends DebugSession {
     });
 
     //'step', 'breakpoint', 'exception', 'pause', 'entry', 'goto', 'function breakpoint', 'data breakpoint', 'instruction breakpoint'
-    this.ddbServer.on(dbg.EVENT_BREAKPOINT_HIT, (e: dbg.IBreakpointHitEvent) => {
-      console.log("\n\n\n\t\t\tBreakpoint hit on thread:", e.threadId);
-      this.sendEvent(new StoppedEvent('breakpoint', e.threadId));
+    this.ddbServer.on(dbg.EVENT_BREAKPOINT_HIT, (threadId: number) => {
+      console.log("\n\n\n\t\t\tBreakpoint hit on thread:", threadId);
+      this.sendEvent(new StoppedEvent('breakpoint', threadId));
     });
     this.ddbServer.on(dbg.EVENT_STEP_FINISHED, (e: dbg.IStepFinishedEvent) => {
       this.sendEvent(new StoppedEvent('step', e.threadId));
@@ -288,11 +287,9 @@ export class DistDebug extends DebugSession {
    * Called at the end of the configuration sequence.
    * Indicates that all breakpoints etc. have been sent to the DA and that the 'launch' can start.
    */
-  protected configurationDoneRequest(response: DebugProtocol.ConfigurationDoneResponse, args: DebugProtocol.ConfigurationDoneArguments): void {
-    super.configurationDoneRequest(response, args);
-
-    // notify the launchRequest that configuration has finished
-    this._configurationDone.notify();
+  protected async configurationDoneRequest(response: DebugProtocol.ConfigurationDoneResponse, args: DebugProtocol.ConfigurationDoneArguments): Promise<void> {
+    console.log("Done setting entry breakpoint");
+    this.ddbServer.setConfigurationDone();
   }
 
   protected async disconnectRequest(response: DebugProtocol.DisconnectResponse, args: DebugProtocol.DisconnectArguments, request?: DebugProtocol.Request) {
@@ -360,12 +357,10 @@ export class DistDebug extends DebugSession {
   }
 
   protected async launchRequest(response: DebugProtocol.LaunchResponse, _args: DebugProtocol.LaunchRequestArguments) {
-    console.log("org args:", _args);
     const args = _args as ILaunchRequestArguments;
 
     try {
       const doc = yaml.load(fs.readFileSync(args.configFile, 'utf8'));
-      console.log("config file loaded:", doc);
       const program = doc?.Components[0]?.bin
       args.program = program;
     }
@@ -393,9 +388,7 @@ export class DistDebug extends DebugSession {
 
 
       console.log("Started DDB");
-      const limit = Date.now() + 10000
-      while (Date.now() < limit) { }
-      await this.waitForConfingureDone();
+      await this.ddbServer.waitForConfigureDone();
       console.log("Configuration done");
       //must wait for configure done. It will get error args without this.
       // await this._startDone.wait(2000);
@@ -411,26 +404,15 @@ export class DistDebug extends DebugSession {
     if (args.cwd) {
       await this.ddbServer.environmentCd(args.cwd);
     }
-    this.varUpperCase = args.varUpperCase;
-    if (args.commandsBeforeExec) {
-      for (const cmd of args.commandsBeforeExec) {
-        await this.ddbServer.execNativeCommand(cmd)
-          .catch((e) => {
-            this.printToDebugConsole(e.message, EMsgType.error);
-          });
-      }
-    }
-
-    // // WE DONT SET EXECUTABLE FILE HERE. WE SET IT IN THE CONFIG FILE. THIS IS JUST TO OPEN IT IN THE VS CODE
-    // // start the program 
-    // let ret = await this.ddbServer.setExecutableFile(args.program)
-    //   .catch((e) => {
-
-    //     vscode.window.showErrorMessage("Failed to start the debugger." + e.message);
-    //     this.sendEvent(new TerminatedEvent(false));
-    //     this.printToDebugConsole(e.message, EMsgType.error);
-    //     return 1;
-    //   }) as number;
+    // this.varUpperCase = args.varUpperCase;
+    // if (args.commandsBeforeExec) {
+    //   for (const cmd of args.commandsBeforeExec) {
+    //     await this.ddbServer.execNativeCommand(cmd)
+    //       .catch((e) => {
+    //         this.printToDebugConsole(e.message, EMsgType.error);
+    //       });
+    //   }
+    // }
     let ret = 0;
     console.log("Done setting executable");
 
@@ -458,13 +440,13 @@ export class DistDebug extends DebugSession {
 
 
     // }
-    // console.log("Starting all inferiors");
-    // await this.ddbServer.startAllInferiors(args.stopAtEntry)
-    //   .catch((e) => {
-    //     this.printToDebugConsole(e.message, EMsgType.error);
-    //     vscode.window.showErrorMessage("Failed to start the debugger." + e.message);
-    //     this.sendEvent(new TerminatedEvent(false));
-    //   });
+    console.log("Starting all inferiors");
+    await this.ddbServer.startAllInferiors(true)
+      .catch((e) => {
+        this.printToDebugConsole(e.message, EMsgType.error);
+        vscode.window.showErrorMessage("Failed to start the debugger." + e.message);
+        this.sendEvent(new TerminatedEvent(false));
+      });
     this.sendResponse(response);
 
   }
@@ -476,9 +458,6 @@ export class DistDebug extends DebugSession {
   protected async setBreakPointsRequest(response: DebugProtocol.SetBreakpointsResponse, args: DebugProtocol.SetBreakpointsArguments): Promise<void> {
     // called by vscode when the user tries to set a breakpoint
     console.log("VSCode requested breakpoints", moment().format("mm:ss"));
-    // await timers.setTimeout(10000);
-    // print process id
-    console.log("process id:", process.pid, moment().format("mm:ss"));
 
     // confirm that the ddb is running
     await this.ddbServer.waitForStart();
@@ -497,9 +476,10 @@ export class DistDebug extends DebugSession {
     })
     const actualBreakpoints: DebugProtocol.Breakpoint[] = [];
     const addBpRes = await Promise.all(addBpPromises);
+    console.log("All breakpoints set")
     addBpRes.forEach((bp) => {
       if (bp[0]) {
-        actualBreakpoints.push({ verified: true, line: bp[1].line });
+        actualBreakpoints.push({ verified: true, line: bp[1]['original-location'] });
       }
     });
 
@@ -512,6 +492,7 @@ export class DistDebug extends DebugSession {
 
   protected breakpointLocationsRequest(response: DebugProtocol.BreakpointLocationsResponse, args: DebugProtocol.BreakpointLocationsArguments, request?: DebugProtocol.Request): void {
     // %IMPLEMENT
+    console.log("Breakpoint location requested");
     response.body = { breakpoints: [] };
     this.sendResponse(response);
   }
@@ -532,41 +513,12 @@ export class DistDebug extends DebugSession {
 
   protected async threadsRequest(response: DebugProtocol.ThreadsResponse): Promise<void> {
     console.log("Threads requested by vscode");
-    let threads: Thread[] = [];
-    let threadList = await this.ddbServer.getThreads();
-    console.log("Thread list:", threadList);
+    await this.ddbServer.waitForStart();
+    const threadList: { all: dbg.IThreadInfo[], current: dbg.IThreadInfo } = await this.ddbServer.getThreads();
 
     this._currentThreadId = threadList.current;
-    let idtype = 0;
-    if (threadList.current) {
-      if (threadList.current.targetId.startsWith('LWP')) {
-        idtype = 1;
-      } else if (threadList.current.targetId.startsWith('Thread')) {
-        idtype = 2;
-      }
-    }
-    threadList.all.forEach((th) => {
-      console.log(`current thread: ${th.targetId}`);
-      if (idtype == 1) {
-        let ids = th.targetId.split(' ');
-        let tid = Number.parseInt(ids[1]);
-        threads.push(new Thread(th.id, `Thread #${tid}`));
-      }
-      else if (idtype == 2) {
-        let ids = th.targetId.split('.');
-        let tid = Number.parseInt(ids[1]);
-        threads.push(new Thread(th.id, `Thread #${th.id} ${th.name ? th.name : ''}`));
-      }
-      else
-        threads.push(new Thread(th.id, th.targetId));
-
-
-    });
-    response.body = {
-      threads: threads
-    };
-    this.sendResponse(response);
-
+    const threads: Thread[] = threadList.all.map(thread => new Thread(thread.id, thread.targetId));
+    this.sendResponse({ ...response, body: { threads } });
   }
 
   protected async stackTraceRequest(response: DebugProtocol.StackTraceResponse, args: DebugProtocol.StackTraceArguments): Promise<void> {

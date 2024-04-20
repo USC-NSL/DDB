@@ -10065,59 +10065,6 @@ var require_moment = __commonJS({
   }
 });
 
-// node_modules/await-notify/index.js
-var require_await_notify = __commonJS({
-  "node_modules/await-notify/index.js"(exports) {
-    function Subject2() {
-      this.waiters = [];
-    }
-    Subject2.prototype.wait = function(timeout) {
-      var self = this;
-      var waiter = {};
-      this.waiters.push(waiter);
-      var promise = new Promise(function(resolve) {
-        var resolved = false;
-        waiter.resolve = function(noRemove) {
-          if (resolved) {
-            return;
-          }
-          resolved = true;
-          if (waiter.timeout) {
-            clearTimeout(waiter.timeout);
-            waiter.timeout = null;
-          }
-          if (!noRemove) {
-            var pos = self.waiters.indexOf(waiter);
-            if (pos > -1) {
-              self.waiters.splice(pos, 1);
-            }
-          }
-          resolve();
-        };
-      });
-      if (timeout > 0 && isFinite(timeout)) {
-        waiter.timeout = setTimeout(function() {
-          waiter.timeout = null;
-          waiter.resolve();
-        }, timeout);
-      }
-      return promise;
-    };
-    Subject2.prototype.notify = function() {
-      if (this.waiters.length > 0) {
-        this.waiters.pop().resolve(true);
-      }
-    };
-    Subject2.prototype.notifyAll = function() {
-      for (var i = this.waiters.length - 1; i >= 0; i--) {
-        this.waiters[i].resolve(true);
-      }
-      this.waiters = [];
-    };
-    exports.Subject = Subject2;
-  }
-});
-
 // node_modules/js-yaml/lib/common.js
 var require_common = __commonJS({
   "node_modules/js-yaml/lib/common.js"(exports, module2) {
@@ -13038,7 +12985,7 @@ __export(extension_exports, {
   deactivate: () => deactivate
 });
 module.exports = __toCommonJS(extension_exports);
-var vscode4 = __toESM(require("vscode"));
+var vscode5 = __toESM(require("vscode"));
 
 // src/util.ts
 var vscode = __toESM(require("vscode"));
@@ -13055,10 +13002,11 @@ var import_debugadapter3 = __toESM(require_main());
 var import_logger = __toESM(require_logger());
 
 // src/activateDistDebug.ts
-var vscode3 = __toESM(require("vscode"));
+var vscode4 = __toESM(require("vscode"));
 
 // src/DistDebug.ts
 var import_debugadapter2 = __toESM(require_main());
+var vscode3 = __toESM(require("vscode"));
 var iconv = __toESM(require_lib());
 
 // src/terminalEscape.ts
@@ -13441,10 +13389,14 @@ var DebugSession = class extends events.EventEmitter {
   constructor() {
     super();
     this._isStarted = false;
+    this._isConfigDone = false;
     this._buffer = "";
   }
   get isStarted() {
     return this._isStarted;
+  }
+  get isConfigDone() {
+    return this._isConfigDone;
   }
   get logger() {
     return import_debugadapter.logger;
@@ -13478,9 +13430,6 @@ var DebugSession = class extends events.EventEmitter {
         err ? reject(err) : resolve();
       };
       if (!this.cleanupWasCalled) {
-        while (this.cmdQueue.length > 0) {
-          this.cmdQueue.pop();
-        }
         notifyDebugger ? this.enqueueCommand(new DebugCommand("gdb-exit", null, cleanup)) : cleanup(null, null);
       }
       ;
@@ -13507,6 +13456,9 @@ var DebugSession = class extends events.EventEmitter {
   }
   setStarted() {
     this._isStarted = true;
+  }
+  setConfigDone() {
+    this._isConfigDone = true;
   }
   parseDebbugerOutput(line) {
     if (line.match(/^\(gdb\)\s*/) || line === "") {
@@ -13686,13 +13638,6 @@ var DebugSession = class extends events.EventEmitter {
       if (options.stopAtStart) {
         fullCmd = fullCmd + " --start";
       }
-    }
-    return this.executeCommand(fullCmd, null);
-  }
-  startAllInferiors(stopAtStart) {
-    var fullCmd = "-exec-run --all";
-    if (stopAtStart) {
-      fullCmd = fullCmd + " --start";
     }
     return this.executeCommand(fullCmd, null);
   }
@@ -14130,25 +14075,6 @@ var DebugSession = class extends events.EventEmitter {
       throw new MalformedResponseError('Expected to find "threads" list with a single element.', output, fullCmd);
     });
   }
-  getThreads() {
-    let fullCmd = "thread-info";
-    return this.getCommandOutput(fullCmd, null, (output) => {
-      console.log("Result for:", fullCmd, output);
-      let currentThreadId = parseInt(output["current-thread-id"], 10);
-      if (Array.isArray(output.threads)) {
-        let currentThread;
-        let threads = output.threads.map((data) => {
-          let thread = extractThreadInfo(data);
-          if (thread.id === currentThreadId) {
-            currentThread = thread;
-          }
-          return thread;
-        });
-        return { all: threads, current: currentThread };
-      }
-      throw new MalformedResponseError('Expected to find "threads" list.', output, fullCmd);
-    });
-  }
   complete(input) {
     let fullCmd = `complete ${input}`;
     return this.getCommandOutput(fullCmd, null, (output) => {
@@ -14207,11 +14133,14 @@ var registerValueFormatSpecToCodeMap = (/* @__PURE__ */ new Map()).set(0 /* Bina
 var import_child_process = require("child_process");
 var vscode2 = __toESM(require("vscode"));
 var process2 = __toESM(require("process"));
+var CONFIG_DONE = "CONFIGURATION_DONE_EVENT";
 var DDBSessionImpl = class extends DebugSession {
   constructor(miVersion = "mi") {
     super();
     this.miVersion = miVersion;
-    this.tokenNumber = 1;
+    this.tokenNumber = 1e4;
+    this.lastOpTime = 0;
+    this._exePaused = true;
     this.tokenHandlers = /* @__PURE__ */ new Map();
     this.breakpoints = /* @__PURE__ */ new Map();
     this.on(EVENT_THREAD_GROUP_STARTED, (e) => {
@@ -14220,14 +14149,11 @@ var DDBSessionImpl = class extends DebugSession {
     this.on("SKIP_LINE_AND_PRINT", (line) => {
     });
   }
-  runCommand(command) {
+  runCommand(command, callback) {
     return new Promise((resolve, reject) => {
       const token = this.tokenNumber++;
-      const fullCmd = `-${command}`;
-      this.tokenHandlers.set(token, (data) => {
-        console.log("Got data from runCommand:", data);
-        resolve();
-      });
+      const fullCmd = `${token}-${command}`;
+      this.tokenHandlers.set(token, callback);
       console.log("Running command:", fullCmd);
       this.debuggerProcess.stdin?.write(fullCmd + "\n");
     });
@@ -14235,17 +14161,30 @@ var DDBSessionImpl = class extends DebugSession {
   async waitForStart() {
     return new Promise((resolve, reject) => {
       if (this.isStarted) {
-        resolve();
+        return resolve();
       } else {
         this.once(EVENT_SESSION_STARTED, () => {
           console.log("\n\n\nCaptured EVENT_SESSION_STARTED\n\n\n");
-          resolve();
+          return resolve();
         });
         this.debuggerProcess?.on("close", () => {
           reject();
         });
       }
     });
+  }
+  async waitForConfigureDone() {
+    return new Promise((resolve, reject) => {
+      if (this.isConfigDone)
+        return resolve();
+      this.once(CONFIG_DONE, () => {
+        this.setConfigDone();
+        return resolve();
+      });
+    });
+  }
+  setConfigurationDone() {
+    this.emit(CONFIG_DONE);
   }
   async startDDB(args) {
     console.log("Starting DDB...", args.configFile);
@@ -14255,11 +14194,17 @@ var DDBSessionImpl = class extends DebugSession {
     debuggerArgs = debuggerArgs.concat(["/home/ubuntu/USC-NSL/distributed-debugger/py_testing/main.py"]);
     debuggerArgs = debuggerArgs.concat([args.configFile]);
     this.debuggerProcess = (0, import_child_process.spawn)(debuggerFilename, debuggerArgs);
+    console.log("Started debugger process: ", this.debuggerProcess);
+    this.debuggerProcess.stdout.on("data", this.stdout.bind(this));
     this.on(EVENT_DBG_CONSOLE_OUTPUT, (out) => {
       console.log("EVENT_DBG_CONSOLE_OUTPUT:", out);
     });
-    console.log("Started debugger process: ", this.debuggerProcess);
-    this.debuggerProcess.stdout?.on("data", this.stdout.bind(this));
+    setInterval(() => {
+      if (Date.now() - this.lastOpTime > 2e3) {
+        console.log("\nCODE RED. NEED MORE OP");
+        this.runCommand("\n");
+      }
+    }, 3e3);
     let currentTerminal = vscode2.window.terminals.find((value, index, obj) => {
       return value.name === "DDB";
     });
@@ -14327,19 +14272,72 @@ var DDBSessionImpl = class extends DebugSession {
     this.target_pid = pid;
   }
   stdout(data) {
+    this.lastOpTime = Date.now();
     const op = data.toString("utf-8");
-    console.log("Got op:", op);
     this.parseOutput(op);
   }
   async addBreakpoint(breakpoint) {
     return new Promise((resolve, reject) => {
-      console.log("Adding breakpoint:", breakpoint);
       if (this.breakpoints.has(breakpoint)) {
         return resolve([false, breakpoint]);
       }
       const loc = `"${breakpoint.file}:${breakpoint.line}"`;
       const cmd = `break-insert -f ${loc}`;
-      this.runCommand(cmd);
+      this.runCommand(cmd, (err, result) => {
+        if (err)
+          return reject([false, err]);
+        return resolve([true, result.bkpt]);
+      });
+    });
+  }
+  async setEntryBreakpoint() {
+    return new Promise((resolve, reject) => {
+      console.log("Adding breakpoint on entry");
+      const cmd = `break-insert -f -t main`;
+      this.runCommand(cmd, (err, result) => {
+        if (err)
+          return reject([false, err]);
+        console.log("Response for breakpoint on entry");
+        return resolve([true, result]);
+      });
+    });
+  }
+  async getThreads() {
+    return new Promise((resolve, reject) => {
+      const fullCmd = `thread-info`;
+      this.runCommand(fullCmd, (error, result) => {
+        if (error)
+          return reject(error);
+        const currentThreadId = +result["current-thread-id"];
+        let currentThread;
+        const threadList = result.threads.map((thread) => {
+          if (+thread.id === currentThreadId)
+            currentThread = thread;
+          return {
+            ...thread,
+            id: +thread.id,
+            targetId: thread["target-id"],
+            frame: {
+              ...thread.frame,
+              level: +thread.frame.level,
+              line: +thread.frame.line
+            },
+            isStopped: thread.state === "stopped",
+            processorCore: thread.core
+          };
+        });
+        return resolve({ all: threadList, current: currentThread });
+      });
+    });
+  }
+  startAllInferiors(stopAtStart) {
+    return new Promise((resolve, reject) => {
+      const fullCmd = `exec-run --all${stopAtStart ? " --start" : ""}`;
+      this.runCommand(fullCmd, (err, result) => {
+        if (err)
+          return reject(err);
+        return resolve(result);
+      });
     });
   }
   async clearBreakpoints(source) {
@@ -14356,19 +14354,66 @@ var DDBSessionImpl = class extends DebugSession {
   }
   async parseOutput(data) {
     const lines = data.split("\n");
-    lines.forEach((line) => {
-      if (line.match(/^\(gdb\)\s*/)) {
-        if (!this.isStarted) {
-          this.emit(EVENT_SESSION_STARTED);
-          this.setStarted();
+    if (!this.isStarted) {
+      const started = lines.filter((line) => line.match(/^\(gdb\)\s*/));
+      if (started.length) {
+        this.emit(EVENT_SESSION_STARTED);
+        this.setStarted();
+        this._exePaused = false;
+        this.runCommand("\n");
+      }
+    }
+    const tokenResponses = [];
+    lines.forEach((line, index) => {
+      if (line.match(/type: result/) && index < lines.length - 1 && lines[index + 1] !== "None") {
+        const token = line.match(/(?<=token: )(\d{1,})/gi)?.[0];
+        if (!token)
+          return;
+        try {
+          const response = JSON.parse(lines[index + 1].replace(/'/g, '"'));
+          tokenResponses.push([+token, response]);
+        } catch (err) {
+          console.error("Cannot parse:", err);
         }
       }
     });
+    tokenResponses.forEach(([token, response]) => {
+      this.tokenHandlers.get(token)?.(null, response);
+    });
+    const notifyResponses = [];
+    lines.forEach((line, index) => {
+      if (line.match(/type: notify/) && index < lines.length - 1 && lines[index + 1] !== "None") {
+        const message = line.match(/(?<=message: )([a-zA-Z-]{1,})/gi)?.[0];
+        if (!message)
+          return;
+        console.log("notify message:", message);
+        try {
+          const response = JSON.parse(lines[index + 1].replace(/'/g, '"'));
+          notifyResponses.push([message, response]);
+        } catch (err) {
+          console.error("Cannot parse for notify:", err);
+        }
+      }
+    });
+    notifyResponses.forEach(([message, response]) => {
+      response.message = message;
+      this.handleParsedOutput(response);
+    });
+  }
+  handleParsedOutput(obj) {
+    switch (obj.reason) {
+      case "breakpoint-hit":
+        this._exePaused = true;
+        this.emit(EVENT_BREAKPOINT_HIT, obj["thread-id"]);
+        break;
+      default:
+        console.log("Nothing", obj);
+        break;
+    }
   }
 };
 
 // src/DistDebug.ts
-var import_await_notify = __toESM(require_await_notify());
 var fs = require("fs");
 var yaml = require_js_yaml();
 var timers = require_timers_promises();
@@ -14384,7 +14429,7 @@ var DistDebug = class extends import_debugadapter2.DebugSession {
     this._breakPoints = /* @__PURE__ */ new Map();
     this._watchs = /* @__PURE__ */ new Map();
     this._currentFrameLevel = 0;
-    this._configurationDone = new import_await_notify.Subject();
+    this._configurationDone = false;
     this._cancellationTokens = /* @__PURE__ */ new Map();
     this._reportProgress = false;
     this._progressId = 1e4;
@@ -14460,9 +14505,9 @@ var DistDebug = class extends import_debugadapter2.DebugSession {
           this.sendEvent(new import_debugadapter2.StoppedEvent("Unrecognized", e.threadId));
       }
     });
-    this.ddbServer.on(EVENT_BREAKPOINT_HIT, (e) => {
-      console.log("\n\n\n			Breakpoint hit on thread:", e.threadId);
-      this.sendEvent(new import_debugadapter2.StoppedEvent("breakpoint", e.threadId));
+    this.ddbServer.on(EVENT_BREAKPOINT_HIT, (threadId) => {
+      console.log("\n\n\n			Breakpoint hit on thread:", threadId);
+      this.sendEvent(new import_debugadapter2.StoppedEvent("breakpoint", threadId));
     });
     this.ddbServer.on(EVENT_STEP_FINISHED, (e) => {
       this.sendEvent(new import_debugadapter2.StoppedEvent("step", e.threadId));
@@ -14531,9 +14576,9 @@ var DistDebug = class extends import_debugadapter2.DebugSession {
     this.sendResponse(response);
     this.sendEvent(new import_debugadapter2.InitializedEvent());
   }
-  configurationDoneRequest(response, args) {
-    super.configurationDoneRequest(response, args);
-    this._configurationDone.notify();
+  async configurationDoneRequest(response, args) {
+    console.log("Done setting entry breakpoint");
+    this.ddbServer.setConfigurationDone();
   }
   async disconnectRequest(response, args, request) {
     console.log(`disconnectRequest suspend: ${args.suspendDebuggee}, terminate: ${args.terminateDebuggee}`);
@@ -14587,11 +14632,9 @@ var DistDebug = class extends import_debugadapter2.DebugSession {
     return this.launchRequest(response, args);
   }
   async launchRequest(response, _args) {
-    console.log("org args:", _args);
     const args = _args;
     try {
       const doc = yaml.load(fs.readFileSync(args.configFile, "utf8"));
-      console.log("config file loaded:", doc);
       const program = doc?.Components[0]?.bin;
       args.program = program;
     } catch (e) {
@@ -14609,10 +14652,7 @@ var DistDebug = class extends import_debugadapter2.DebugSession {
       args.cwd = "";
       await this.ddbServer.startDDB(args);
       console.log("Started DDB");
-      const limit = Date.now() + 1e4;
-      while (Date.now() < limit) {
-      }
-      await this.waitForConfingureDone();
+      await this.ddbServer.waitForConfigureDone();
       console.log("Configuration done");
       await this.ddbServer.waitForStart();
       console.log("\n\n\nDDB start confirmed");
@@ -14624,14 +14664,6 @@ var DistDebug = class extends import_debugadapter2.DebugSession {
     if (args.cwd) {
       await this.ddbServer.environmentCd(args.cwd);
     }
-    this.varUpperCase = args.varUpperCase;
-    if (args.commandsBeforeExec) {
-      for (const cmd of args.commandsBeforeExec) {
-        await this.ddbServer.execNativeCommand(cmd).catch((e) => {
-          this.printToDebugConsole(e.message, 1 /* error */);
-        });
-      }
-    }
     let ret = 0;
     console.log("Done setting executable");
     if (ret > 0) {
@@ -14640,6 +14672,12 @@ var DistDebug = class extends import_debugadapter2.DebugSession {
     if (args.programArgs) {
       await this.ddbServer.setInferiorArguments(args.programArgs);
     }
+    console.log("Starting all inferiors");
+    await this.ddbServer.startAllInferiors(true).catch((e) => {
+      this.printToDebugConsole(e.message, 1 /* error */);
+      vscode3.window.showErrorMessage("Failed to start the debugger." + e.message);
+      this.sendEvent(new import_debugadapter2.TerminatedEvent(false));
+    });
     this.sendResponse(response);
   }
   setFunctionBreakPointsRequest(response, args, request) {
@@ -14647,7 +14685,6 @@ var DistDebug = class extends import_debugadapter2.DebugSession {
   }
   async setBreakPointsRequest(response, args) {
     console.log("VSCode requested breakpoints", moment2().format("mm:ss"));
-    console.log("process id:", process.pid, moment2().format("mm:ss"));
     await this.ddbServer.waitForStart();
     let isPause = false;
     if (this._isRunning) {
@@ -14661,9 +14698,10 @@ var DistDebug = class extends import_debugadapter2.DebugSession {
     });
     const actualBreakpoints = [];
     const addBpRes = await Promise.all(addBpPromises);
+    console.log("All breakpoints set");
     addBpRes.forEach((bp) => {
       if (bp[0]) {
-        actualBreakpoints.push({ verified: true, line: bp[1].line });
+        actualBreakpoints.push({ verified: true, line: bp[1]["original-location"] });
       }
     });
     response.body = {
@@ -14672,6 +14710,7 @@ var DistDebug = class extends import_debugadapter2.DebugSession {
     this.sendResponse(response);
   }
   breakpointLocationsRequest(response, args, request) {
+    console.log("Breakpoint location requested");
     response.body = { breakpoints: [] };
     this.sendResponse(response);
   }
@@ -14690,35 +14729,11 @@ var DistDebug = class extends import_debugadapter2.DebugSession {
   }
   async threadsRequest(response) {
     console.log("Threads requested by vscode");
-    let threads = [];
-    let threadList = await this.ddbServer.getThreads();
-    console.log("Thread list:", threadList);
+    await this.ddbServer.waitForStart();
+    const threadList = await this.ddbServer.getThreads();
     this._currentThreadId = threadList.current;
-    let idtype = 0;
-    if (threadList.current) {
-      if (threadList.current.targetId.startsWith("LWP")) {
-        idtype = 1;
-      } else if (threadList.current.targetId.startsWith("Thread")) {
-        idtype = 2;
-      }
-    }
-    threadList.all.forEach((th) => {
-      console.log(`current thread: ${th.targetId}`);
-      if (idtype == 1) {
-        let ids = th.targetId.split(" ");
-        let tid = Number.parseInt(ids[1]);
-        threads.push(new import_debugadapter2.Thread(th.id, `Thread #${tid}`));
-      } else if (idtype == 2) {
-        let ids = th.targetId.split(".");
-        let tid = Number.parseInt(ids[1]);
-        threads.push(new import_debugadapter2.Thread(th.id, `Thread #${th.id} ${th.name ? th.name : ""}`));
-      } else
-        threads.push(new import_debugadapter2.Thread(th.id, th.targetId));
-    });
-    response.body = {
-      threads
-    };
-    this.sendResponse(response);
+    const threads = threadList.all.map((thread) => new import_debugadapter2.Thread(thread.id, thread.targetId));
+    this.sendResponse({ ...response, body: { threads } });
   }
   async stackTraceRequest(response, args) {
     console.log("Stack trace requested by vscode", args.startFrame, args.levels);
@@ -14946,25 +14961,25 @@ var DistDebug = class extends import_debugadapter2.DebugSession {
 
 // src/activateDistDebug.ts
 function activateDistDebug(context) {
-  context.subscriptions.push(vscode3.commands.registerCommand("extension.ddb.getProgramName", (config) => {
-    return vscode3.window.showOpenDialog({ canSelectMany: false, openLabel: "Program file" }).then((file) => {
+  context.subscriptions.push(vscode4.commands.registerCommand("extension.ddb.getProgramName", (config) => {
+    return vscode4.window.showOpenDialog({ canSelectMany: false, openLabel: "Program file" }).then((file) => {
       return file[0].fsPath;
     });
   }));
-  context.subscriptions.push(vscode3.commands.registerCommand("extension.ddb.getDDBConfigFile", (config) => {
-    return vscode3.window.showOpenDialog({ canSelectMany: false, openLabel: "YAML Config file" }).then((file) => {
+  context.subscriptions.push(vscode4.commands.registerCommand("extension.ddb.getDDBConfigFile", (config) => {
+    return vscode4.window.showOpenDialog({ canSelectMany: false, openLabel: "YAML Config file" }).then((file) => {
       return file[0].fsPath;
     });
   }));
   const provider = new MockConfigurationProvider();
-  context.subscriptions.push(vscode3.debug.registerDebugConfigurationProvider("ddb", provider));
+  context.subscriptions.push(vscode4.debug.registerDebugConfigurationProvider("ddb", provider));
   const factory = new InlineDebugAdapterFactory();
-  context.subscriptions.push(vscode3.debug.registerDebugAdapterDescriptorFactory("ddb", factory));
+  context.subscriptions.push(vscode4.debug.registerDebugAdapterDescriptorFactory("ddb", factory));
 }
 var MockConfigurationProvider = class {
   resolveDebugConfiguration(folder, config, token) {
     if (!config.type && !config.request && !config.name) {
-      const editor = vscode3.window.activeTextEditor;
+      const editor = vscode4.window.activeTextEditor;
       if (editor) {
         config.type = "ddb";
         config.name = "Launch(DDB)";
@@ -14974,7 +14989,7 @@ var MockConfigurationProvider = class {
       }
     }
     if (!config.program) {
-      return vscode3.window.showInformationMessage("Cannot find a program to debug").then((_) => {
+      return vscode4.window.showInformationMessage("Cannot find a program to debug").then((_) => {
         return void 0;
       });
     }
@@ -14983,7 +14998,7 @@ var MockConfigurationProvider = class {
 };
 var InlineDebugAdapterFactory = class {
   createDebugAdapterDescriptor(_session) {
-    return new vscode3.DebugAdapterInlineImplementation(new DistDebug());
+    return new vscode4.DebugAdapterInlineImplementation(new DistDebug());
   }
 };
 
@@ -14991,7 +15006,7 @@ var InlineDebugAdapterFactory = class {
 var runMode = "inline";
 console.log("runMode:::: ", runMode);
 function activate(context) {
-  const outputChannel = vscode4.window.createOutputChannel("Distributed Debugger");
+  const outputChannel = vscode5.window.createOutputChannel("Distributed Debugger");
   import_debugadapter3.logger.init((e) => outputChannel.appendLine(e.body.output), void 0, true);
   import_debugadapter3.logger.setup(import_logger.LogLevel.Log);
   setExtensionContext(context);

@@ -82,12 +82,17 @@ export default class DebugSession extends events.EventEmitter {
 
   //is gdb started
   private _isStarted: boolean = false;
+  private _isConfigDone: boolean = false;
 
   //instream buffer
   private _buffer: string = "";
 
   get isStarted() {
     return this._isStarted;
+  }
+
+  get isConfigDone() {
+    return this._isConfigDone;
   }
 
   get logger(): any {
@@ -158,9 +163,9 @@ export default class DebugSession extends events.EventEmitter {
       };
       
       if (!this.cleanupWasCalled) {
-        while(this.cmdQueue.length>0){
-          this.cmdQueue.pop();
-        }
+        // while(this.cmdQueue.length>0){
+        //   this.cmdQueue.pop();
+        // }
         notifyDebugger ? this.enqueueCommand(new DebugCommand('gdb-exit', null, cleanup))
           : cleanup(null, null);
       };
@@ -200,6 +205,10 @@ export default class DebugSession extends events.EventEmitter {
   // set _isStarted
   protected setStarted() {
     this._isStarted = true;
+  }
+
+  protected setConfigDone() {
+    this._isConfigDone = true;
   }
 
   /**
@@ -644,14 +653,14 @@ export default class DebugSession extends events.EventEmitter {
    * @param stopAtStart *(GDB specific)* If `true` then execution will stop at the start
    *                    of the main function.
    */
-  startAllInferiors(stopAtStart?: boolean): Promise<void> {
-    var fullCmd: string = '-exec-run --all';
-    if (stopAtStart) {
-      fullCmd = fullCmd + ' --start';
-    }
+  // startAllInferiors(stopAtStart?: boolean): Promise<void> {
+  //   var fullCmd: string = '-exec-run --all';
+  //   if (stopAtStart) {
+  //     fullCmd = fullCmd + ' --start';
+  //   }
 
-    return this.executeCommand(fullCmd, null);
-  }
+  //   return this.executeCommand(fullCmd, null);
+  // }
 
   /**
    * Kills the currently selected inferior.
@@ -1575,26 +1584,26 @@ export default class DebugSession extends events.EventEmitter {
    * Gets information about all threads in all inferiors.
    * @returns A promise that will be resolved with information about all threads.
    */
-  getThreads(): Promise<IMultiThreadInfo> {
-    let fullCmd = 'thread-info';
-    // console.log("Running command: " + fullCmd);
-    return this.getCommandOutput(fullCmd, null, (output: any) => {
-      console.log("Result for:", fullCmd, output);
-      let currentThreadId: number = parseInt(output['current-thread-id'], 10);
-      if (Array.isArray(output.threads)) {
-        let currentThread: IThreadInfo;
-        let threads: IThreadInfo[] = output.threads.map((data: any) => {
-          let thread: IThreadInfo = extractThreadInfo(data);
-          if (thread.id === currentThreadId) {
-            currentThread = thread;
-          }
-          return thread;
-        });
-        return { all: threads, current: currentThread };
-      }
-      throw new MalformedResponseError('Expected to find "threads" list.', output, fullCmd);
-    });
-  }
+  // getThreads(): Promise<IMultiThreadInfo> {
+  //   let fullCmd = 'thread-info';
+  //   // console.log("Running command: " + fullCmd);
+  //   return this.getCommandOutput(fullCmd, null, (output: any) => {
+  //     console.log("Result for:", fullCmd, output);
+  //     let currentThreadId: number = parseInt(output['current-thread-id'], 10);
+  //     if (Array.isArray(output.threads)) {
+  //       let currentThread: IThreadInfo;
+  //       let threads: IThreadInfo[] = output.threads.map((data: any) => {
+  //         let thread: IThreadInfo = extractThreadInfo(data);
+  //         if (thread.id === currentThreadId) {
+  //           currentThread = thread;
+  //         }
+  //         return thread;
+  //       });
+  //       return { all: threads, current: currentThread };
+  //     }
+  //     throw new MalformedResponseError('Expected to find "threads" list.', output, fullCmd);
+  //   });
+  // }
   /**
    * Show a list of completions for partially typed CLI command.
    * @param input  input string
