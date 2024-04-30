@@ -102,7 +102,7 @@ class CmdRouter:
         
         if (prefix in ["b", "break", "-break-insert"]):
             self.broadcast(token, cmd)
-        elif (prefix in ["bt-remote"]):
+        elif (cmd_no_token in ["-bt-remote"]):
             aggreated_bt_result = []
             bt_result = await self.send_to_current_thread_async(token, f"{token}-stack-list-frames")
             assert(len(bt_result) == 1)
@@ -177,7 +177,9 @@ class CmdRouter:
         sid, tid = self.state_mgr.get_sidtid_by_gtid(gtid)
         self.register_cmd(token, sid, transformer)
         # [ s.write(cmd) for s in self.sessions if s.sid == curr_thread ]
-        self.sessions[sid].write("-thread-select " + str(tid) + "\n" + cmd)
+        self.sessions[sid].write(
+            "-thread-select " + str(tid) + "\n" + 
+                                 cmd)
 
     def send_to_current_thread(self, token: Optional[str], cmd: str, transformer: Optional[ResponseTransformer] = None):
         curr_thread = self.state_mgr.get_current_gthread()
