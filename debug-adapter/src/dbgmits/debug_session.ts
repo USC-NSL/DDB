@@ -698,14 +698,14 @@ export default class DebugSession extends events.EventEmitter {
    *
    * @param reverse *(GDB specific)* If `true` the inferiors are executed in reverse.
    */
-  resumeAllThreads(reverse: boolean = false): Promise<void> {
-    var fullCmd: string = '-exec-continue --all';
-    if (reverse) {
-      fullCmd = fullCmd + ' --reverse';
-    }
+  // resumeAllThreads(reverse: boolean = false): Promise<void> {
+  //   var fullCmd: string = '-exec-continue --all';
+  //   if (reverse) {
+  //     fullCmd = fullCmd + ' --reverse';
+  //   }
 
-    return this.executeCommand(fullCmd, null);
-  }
+  //   return this.executeCommand(fullCmd, null);
+  // }
 
   getExecFileName(): Promise<void> {
     const fullCmd = "info sources";
@@ -1079,65 +1079,65 @@ export default class DebugSession extends events.EventEmitter {
    *                           which the watch is created.
    *                           *Default*: `false`.
    */
-  addWatch(
-    expression: string,
-    options?: {
-      id?: string;
-      threadId?: number;
-      threadGroup?: string;
-      frameLevel?: number;
-      frameAddress?: string;
-      isFloating?: boolean;
-    }
-  ): Promise<IWatchInfo> {
-    var fullCmd: string = 'var-create';
-    var id = '-'; // auto-generate id
-    var addr = '*'; // use current frame
+  // addWatch(
+  //   expression: string,
+  //   options?: {
+  //     id?: string;
+  //     threadId?: number;
+  //     threadGroup?: string;
+  //     frameLevel?: number;
+  //     frameAddress?: string;
+  //     isFloating?: boolean;
+  //   }
+  // ): Promise<IWatchInfo> {
+  //   var fullCmd: string = 'var-create';
+  //   var id = '-'; // auto-generate id
+  //   var addr = '*'; // use current frame
 
-    if (options) {
-      if (options.id) {
-        id = options.id;
-      }
-      if (options.threadId !== undefined) {
-        fullCmd = fullCmd + ' --thread ' + options.threadId;
-      }
-      if (options.threadGroup) {
-        fullCmd = fullCmd + ' --thread-group ' + options.threadGroup;
-      }
-      if (options.frameLevel !== undefined) {
-        fullCmd = fullCmd + ' --frame ' + options.frameLevel;
-      }
-      if (options.isFloating === true) {
-        addr = '@';
-      } else if (options.frameAddress) {
-        addr = options.frameAddress;
-      }
-    }
+  //   if (options) {
+  //     if (options.id) {
+  //       id = options.id;
+  //     }
+  //     if (options.threadId !== undefined) {
+  //       fullCmd = fullCmd + ' --thread ' + options.threadId;
+  //     }
+  //     if (options.threadGroup) {
+  //       fullCmd = fullCmd + ' --thread-group ' + options.threadGroup;
+  //     }
+  //     if (options.frameLevel !== undefined) {
+  //       fullCmd = fullCmd + ' --frame ' + options.frameLevel;
+  //     }
+  //     if (options.isFloating === true) {
+  //       addr = '@';
+  //     } else if (options.frameAddress) {
+  //       addr = options.frameAddress;
+  //     }
+  //   }
 
-    fullCmd = fullCmd + ` ${id} ${addr} ${expression}`;
+  //   fullCmd = fullCmd + ` ${id} ${addr} ${expression}`;
 
-    return this.getCommandOutput(fullCmd, null, (output: any) => {
-      return {
-        id: output.name,
-        childCount: parseInt(output.numchild, 10),
-        value: output.value,
-        expressionType: output['type'],
-        threadId: parseInt(output['thread-id'], 10),
-        hasMoreChildren: output.has_more !== '0',
-        isDynamic: output.dynamic === '1',
-        displayHint: output.displayhint
-      };
-    });
-  }
+  //   return this.getCommandOutput(fullCmd, null, (output: any) => {
+  //     return {
+  //       id: output.name,
+  //       childCount: parseInt(output.numchild, 10),
+  //       value: output.value,
+  //       expressionType: output['type'],
+  //       threadId: parseInt(output['thread-id'], 10),
+  //       hasMoreChildren: output.has_more !== '0',
+  //       isDynamic: output.dynamic === '1',
+  //       displayHint: output.displayhint
+  //     };
+  //   });
+  // }
 
   /**
    * Destroys a previously created watch.
    *
    * @param id Identifier of the watch to destroy.
    */
-  removeWatch(id: string): Promise<void> {
-    return this.executeCommand('var-delete ' + id);
-  }
+  // removeWatch(id: string): Promise<void> {
+  //   return this.executeCommand('var-delete ' + id);
+  // }
 
   /**
    * Updates the state of an existing watch.

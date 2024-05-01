@@ -1,20 +1,16 @@
 import { DebugSession, TargetStopReason, EVENT_TARGET_STOPPED, IDebugSessionEvent } from './dbgmits';
 import * as dbg from './dbgmits';
 import { spawn, ChildProcess, exec, execSync } from 'child_process';
-import { Transform } from 'stream';
 import * as vscode from 'vscode';
-import { SIGINT, SIGQUIT } from 'constants';
-import { promises, fstat } from 'fs';
+import { parseMI, MINode } from './miParser';
 import * as process from 'process';
-import * as os from 'os';
-import { getExtensionFilePath } from './util';
-import * as path from 'path';
-import { match } from 'assert';
-import { LogLevel } from '@vscode/debugadapter/lib/logger';
 import { IAttachRequestArguments, ILaunchRequestArguments } from './arguements';
 import * as Templates from './templates';
+import _ = require('lodash');
 
 const CONFIG_DONE = "CONFIGURATION_DONE_EVENT";
+const tokenOutputRegex = /^\d{1,}[\^\=\*].+/;
+const notifyOutputRegex = /^\*+.+/;
 
 export class DDBSessionImpl extends DebugSession {
   // has everything from debug_session.ts
@@ -24,6 +20,7 @@ export class DDBSessionImpl extends DebugSession {
   private major_version!: number;
   private tokenNumber = 10000;
   private lastOpTime = 0;
+  private opBuffer = "";
   private _exePaused = true;
   private tokenHandlers: Map<Number, Function> = new Map();
 
@@ -42,8 +39,12 @@ export class DDBSessionImpl extends DebugSession {
     })
   }
 
-  public runCommand(command: string, callback?: Function): Promise<void> {
+  public runCommand(command: string, callback?: Function, noToken?: boolean): Promise<void> {
     return new Promise((resolve, reject) => {
+      if (noToken) {
+        this.debuggerProcess.stdin?.write(command + "\n");
+        return resolve();
+      }
       const token = this.tokenNumber++;
       const fullCmd = `${token}-${command}`;
       // const fullCmd = `-${command}`;
@@ -110,7 +111,7 @@ export class DDBSessionImpl extends DebugSession {
     setInterval(() => {
       if (Date.now() - this.lastOpTime > 2000) {
         console.log("\nCODE RED. NEED MORE OP");
-        this.runCommand("\n")
+        this.runCommand("\n", () => {}, true);
       }
     }, 3000);
 
@@ -140,7 +141,7 @@ export class DDBSessionImpl extends DebugSession {
     });
 
     this.debuggerProcess.once('exit', () => {
-      this.end(false);
+      this.debuggerProcess?.stdout?.removeAllListeners();
     });
 
     this.debuggerProcess.on('SIGINT', () => {
@@ -207,6 +208,7 @@ export class DDBSessionImpl extends DebugSession {
     this.lastOpTime = Date.now();
     const op = data.toString("utf-8");
     // console.log("Got op:", op);
+    // this.opBuffer += op;
     this.parseOutput(op);
   }
 
@@ -219,7 +221,9 @@ export class DDBSessionImpl extends DebugSession {
       const cmd = `break-insert -f ${loc}`;
       this.runCommand(cmd, (err, result) => {
         if (err) return reject([false, err]);
-        return resolve([true, result.bkpt]);
+        const miResults = result.results[0];
+        const bkptResult = miResults[1].reduce((obj, item) => { return { ...obj, [item[0]]: item[1] } }, {})
+        return resolve([true, bkptResult]);
       });
 
     })
@@ -237,12 +241,15 @@ export class DDBSessionImpl extends DebugSession {
     })
   }
 
-  public async getThreads(): Promise<{all: [], current: dbg.IThreadInfo}> {
+  public async getThreads(): Promise<{ all: [], current: dbg.IThreadInfo }> {
     return new Promise((resolve, reject) => {
       const fullCmd = `thread-info`;
-      this.runCommand(fullCmd, (error, result) => {
+      this.runCommand(fullCmd, (error, miResult) => {
         if (error) return reject(error);
+        // const result = miResult.results?.reduce((obj, item) => { return { ...obj, [item[0]]: item[1] } }, {});
+        const result = _.fromPairs(miResult.results);
         const currentThreadId = +result['current-thread-id'];
+        result.threads = result.threads.map(thread => _.fromPairs(thread));
         let currentThread: dbg.IThreadInfo;
         const threadList = result.threads.map(thread => {
           if (+thread.id === currentThreadId)
@@ -261,6 +268,86 @@ export class DDBSessionImpl extends DebugSession {
           }
         })
         return resolve({ all: threadList, current: currentThread });
+      })
+    })
+  }
+
+  public async getStackTrace(threadId?: number, frameId?: number, maxLevels?: number): Promise<dbg.IStackFrameInfo[]> {
+    return new Promise((resolve, reject) => {
+      const options = [];
+      if (threadId) options.push(`--thread ${threadId}`);
+      const fullCmd = `stack-list-frames ${options.join(" ")}`;
+      this.runCommand(fullCmd, (error, miResult) => {
+        if (error) return reject(error);
+        const result = _.fromPairs(miResult.results);
+        result.stack = result.stack.map(frame => _.fromPairs(frame));
+        const frames = result.stack.map(frame => {
+          return {
+            level: +frame.level,
+            address: frame.addr,
+            func: frame.func,
+            file: frame.file,
+            fullname: frame.fullname,
+            line: +frame.line,
+            filename: frame.file
+          }
+        })
+        return resolve(frames);
+      })
+    })
+  }
+
+  public async getStackVariables(threadId: number, frame: number): Promise<dbg.IVariableInfo[]> {
+    return new Promise((resolve, reject) => {
+      const fullCmd = `stack-list-variables --thread ${threadId} --frame ${frame} --simple-values`;
+      this.runCommand(fullCmd, (error, miResult) => {
+        if (error) return reject(error);
+        const result = _.fromPairs(miResult.results);
+        result.variables = result.variables.map(variable => _.fromPairs(variable));
+        const variables = result.variables.map(variable => {
+          return {
+            name: variable.name,
+            type: variable.type,
+            value: variable.value,
+            raw: variable
+          }
+        })
+        return resolve(variables);
+      })
+    })
+  }
+
+  public async addWatch(exp: string, threadId?: number, frameLevel?: number): Promise<dbg.IWatchInfo> {
+    return new Promise((resolve, reject) => {
+      const options = [];
+      if (threadId) options.push(`--thread ${threadId}`);
+      if (frameLevel) options.push(`--frame ${frameLevel}`);
+      const fullCmd = `var-create ${options.join(" ")} - * "${exp}"`;
+      this.runCommand(fullCmd, (error, miResult) => {
+        if (error) return reject(error);
+        const result = _.fromPairs(miResult.results);
+        console.log("Add watch result:", result);
+        return resolve(result);
+      })
+    })
+  }
+
+  public async resumeThreads(threadId?: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const fullCmd = `exec-continue ${threadId ? `--thread ${threadId}` : "all"}`;
+      this.runCommand(fullCmd, (err, result) => {
+        if (err) return reject(err);
+        return resolve(result);
+      });
+    })  
+  }
+
+  public async removeWatch(id: string) {
+    return new Promise((resolve, reject) => {
+      const fullCmd = `var-delete ${id}`;
+      this.runCommand(fullCmd, (error, miResult) => {
+        if (error) return reject(error);
+        return resolve(miResult);
       })
     })
   }
@@ -290,6 +377,12 @@ export class DDBSessionImpl extends DebugSession {
   }
 
   private async parseOutput(data: string) {
+    // const end = this.opBuffer.lastIndexOf("\n");
+    // let data = "";
+    // if (end !== -1) {
+
+    // }
+
     const lines = data.split("\n");
     if (!this.isStarted) {
       const started = lines.filter(line => line.match(/^\(gdb\)\s*/));
@@ -302,44 +395,39 @@ export class DDBSessionImpl extends DebugSession {
     }
 
     const tokenResponses = [];
-    lines.forEach((line, index) => {
-      if (line.match(/type: result/) && index < lines.length - 1 && lines[index + 1] !== "None") {
-        const token = line.match(/(?<=token: )(\d{1,})/gi)?.[0];
-        if (!token) return;
+    const notifyResponses = [];
+    lines.forEach(line => {
+      if (tokenOutputRegex.exec(line)) {
         try {
-          const response = JSON.parse(lines[index + 1].replace(/'/g, '"'));
-          tokenResponses.push([+token, response])
+          const parsedResult = parseMI(line);
+          if (parsedResult?.resultRecords?.resultClass === "done") {
+            const token = +parsedResult.token;
+            tokenResponses.push([token, parsedResult.resultRecords]);
+          }
         }
         catch (err) {
-          console.error("Cannot parse:", err);
+          console.log("This isnt MI output");
         }
       }
+      if (notifyOutputRegex.exec(line)) {
+        try {
+          const parsedResult = parseMI(line);
+          console.log("parsedResult for notify:", parsedResult);
+          const parsedOp = parsedResult.outOfBandRecord[0]?.output?.reduce((obj, item) => { return { ...obj, [item[0]]: item[1] } }, {});
+          notifyResponses.push(parsedOp);
+        } catch(err) {
+          console.log("This isnt MI output for notify");
+        }
+      }
+
+
     })
 
     tokenResponses.forEach(([token, response]) => {
       this.tokenHandlers.get(token)?.(null, response);
     })
 
-    const notifyResponses = [];
-    lines.forEach((line, index) => {
-      if (line.match(/type: notify/) && index < lines.length - 1 && lines[index + 1] !== "None") {
-        const message = line.match(/(?<=message: )([a-zA-Z-]{1,})/gi)?.[0];
-        if (!message) return;
-        console.log("notify message:", message);
-        try {
-          const response = JSON.parse(lines[index + 1].replace(/'/g, '"'));
-          notifyResponses.push([message, response])
-        }
-        catch (err) {
-          console.error("Cannot parse for notify:", err);
-        }
-      }
-    })
-
-    notifyResponses.forEach(([message, response]) => {
-      response.message = message;
-      this.handleParsedOutput(response);
-    })
+    notifyResponses.forEach(this.handleParsedOutput.bind(this));
 
   }
 
@@ -347,8 +435,10 @@ export class DDBSessionImpl extends DebugSession {
     switch (obj.reason) {
       case "breakpoint-hit":
         this._exePaused = true;
-        this.emit(dbg.EVENT_BREAKPOINT_HIT, obj['thread-id'])
-        // this.handleBreakpoint(response)
+        this.emit(dbg.EVENT_BREAKPOINT_HIT, obj);
+        break;
+      case "exited-normally":
+        this.emit(dbg.EVENT_TARGET_STOPPED, { reason: TargetStopReason.Exited });
         break;
       default:
         console.log("Nothing", obj);

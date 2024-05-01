@@ -11,9 +11,11 @@ Components:
 - mode: local
   tag: test_server_1 
   bin: "./bin/multithread_print"
+  cwd: "/home/ubuntu/USC-NSL/distributed-debugger"
   args: []
 - mode: local
   tag: test_server_2
   bin: "./bin/multithread_print"
+  cwd: "/home/ubuntu/USC-NSL/distributed-debugger"
   args: []
 

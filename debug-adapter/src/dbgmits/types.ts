@@ -166,6 +166,7 @@ export interface IVariableInfo {
   value?: string;
   /** Type of the variable. */
   type?: string;
+  raw?: any;
 }
 
 /** Contains information about the arguments of a stack frame. */
