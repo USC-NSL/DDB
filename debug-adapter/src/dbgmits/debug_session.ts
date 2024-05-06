@@ -9,6 +9,7 @@ import * as parser from './mi_output_parser';
 import { RecordType } from './mi_output';
 import * as Events from './events';
 import { logger } from '@vscode/debugadapter';
+import moment = require('moment');
 import {
   IBreakpointInfo, IBreakpointLocationInfo,
   IStackFrameInfo, IStackFrameArgsInfo, IStackFrameVariablesInfo, IVariableInfo,
@@ -81,12 +82,17 @@ export default class DebugSession extends events.EventEmitter {
 
   //is gdb started
   private _isStarted: boolean = false;
+  private _isConfigDone: boolean = false;
 
   //instream buffer
   private _buffer: string = "";
 
   get isStarted() {
     return this._isStarted;
+  }
+
+  get isConfigDone() {
+    return this._isConfigDone;
   }
 
   get logger(): any {
@@ -107,56 +113,28 @@ export default class DebugSession extends events.EventEmitter {
    */
   start(inStream: stream.Readable, outStream: stream.Writable) {
     this.outStream = outStream;
-    // inStream.on('data',(data:any)=>{
-    //   if (typeof data === "string") {
-    //     this._buffer += data;
-    //   }
-    //   else {
-    //     this._buffer += data.toString("utf8");
-    //   }
-    //   //logger.log('(((('+this._buffer+'))))');
-    //   const end = this._buffer.lastIndexOf('\n');
-    //   if (end !== -1) {
-    //     let data=this._buffer.substr(0, end);
-    //     data.split('\n').forEach((line,n)=>{
-    //       //logger.log(n+':'+line);
-    //       try {
-    //         this.parseDebbugerOutput(line);
-    //       } catch (error) {
-
-    //       }
-
-    //     });
-    //     this._buffer = this._buffer.substr(end + 1);
-    //   }
-
-    //   if (this._buffer.length) {
-    //    	this.emit('data',this._buffer);
-    //    }
-    // });
+    
     this.lineReader = readline.createInterface({
       input: inStream,
       output: null
     });
-    this.lineReader.on('line', (line: string) => {
-      console.log("reading line:", line);
+    this.lineReader.on('line', async (line: string) => {
+      console.log(`${moment().format("hh:mm")} reading line:`, `%%${line}%%`);
       if (line.match(/^\s*startup command:/)) {
         console.log("Adding empty line");
-        for (let i = 0; i < 10; i++)
-          this.executeCommand("\n", null, true);
-        return;
-      }
-      if (line.match(/^\(gdb\)\s*/)) {
-        // pop command from queue and send to debugger
-        console.log(`\n\n\nOMG OMG OMG!!! I am asked for a command. I have ${this.cmdQueue.length}. running`, this.cmdQueue[0]);
-        if (this.cmdQueue.length) {
-          const cmd = this.cmdQueue.shift();
-          this.sendCommandToDebugger(cmd);
-        }
-        return;
+        await this.executeCommand("\n");
+        console.log("Doe adding empty line");
       }
       try {
-        this.parseDebbugerOutput(line);
+        // this.parseDebbugerOutput(line);
+        // if (line.match(/^\(gdb\)\s*/)) {
+        //   // pop command from queue and send to debugger
+        //   console.log(`\n\n\nOMG OMG OMG!!! I am asked for a command. I have ${this.cmdQueue.length}. running`, this.cmdQueue[0]);
+        //   if (this.cmdQueue.length) {
+        //     const cmd = this.cmdQueue.shift();
+        //     this.sendCommandToDebugger(cmd);
+        //   }
+        // }
       } catch (error) {
         //logger.error(error);
       }
@@ -185,9 +163,9 @@ export default class DebugSession extends events.EventEmitter {
       };
       
       if (!this.cleanupWasCalled) {
-        while(this.cmdQueue.length>0){
-          this.cmdQueue.pop();
-        }
+        // while(this.cmdQueue.length>0){
+        //   this.cmdQueue.pop();
+        // }
         notifyDebugger ? this.enqueueCommand(new DebugCommand('gdb-exit', null, cleanup))
           : cleanup(null, null);
       };
@@ -224,6 +202,15 @@ export default class DebugSession extends events.EventEmitter {
     }
   }
 
+  // set _isStarted
+  protected setStarted() {
+    this._isStarted = true;
+  }
+
+  protected setConfigDone() {
+    this._isConfigDone = true;
+  }
+
   /**
    * Parse a single line containing a response to a MI command or some sort of async notification.
    */
@@ -231,12 +218,21 @@ export default class DebugSession extends events.EventEmitter {
     // '(gdb)' (or '(gdb) ' in some cases) is used to indicate the end of a set of output lines
     // from the debugger, but since we process each line individually as it comes in this
     // particular marker is of no use
-
+    // console.log("Parsing debugger output:", line);
    
     if (line.match(/^\(gdb\)\s*/) || (line === '')) {
       if (!this._isStarted) {
-        this.emit(Events.EVENT_SESSION_STARTED);
+        // this.emit(Events.EVENT_SESSION_STARTED);
         this._isStarted = true;
+        const cmd = this.cmdQueue[0];
+        console.log("taking out empty line:", cmd);
+        if(cmd.text === "\n"){
+          // if (cmd.done) {
+          //   cmd.done(null, true);
+          // }
+          this.cmdQueue.shift();
+          console.log("Took out a command for empty line");
+        }
       }
       return;
     }
@@ -261,6 +257,7 @@ export default class DebugSession extends events.EventEmitter {
       return;
       //throw err;
     }
+    console.log("\n\n\nParsed result:", result);
     switch (result.recordType) {
       case RecordType.Done:
       case RecordType.Running:
@@ -328,8 +325,10 @@ export default class DebugSession extends events.EventEmitter {
     if (this.logger) {
       this.logger.log(cmdStr);
     }
-    console.log("Sending command to debugger:::: ", cmdStr);
+    console.log("Sending command to debugger::::", cmdStr);
     this.outStream.write(cmdStr + '\n');
+    // this.outStream.write('\n');
+
   }
 
   /**
@@ -340,16 +339,13 @@ export default class DebugSession extends events.EventEmitter {
    * processed.
    */
   private enqueueCommand(command: DebugCommand, immediate: boolean = false): void {
-    if (immediate) {
-      this.sendCommandToDebugger(command);
-      return;
-    }
     this.cmdQueue.push(command);
-    // commands are available here. but only send to debugger when debugger output has (gdb )
+    console.log("Enqueueing command:", command.text, command.token, this.cmdQueue.length, this.cmdQueue);
 
-    // if (this.cmdQueue.length === 1) {
-    //   this.sendCommandToDebugger(this.cmdQueue[0]);
-    // }
+    if (this.cmdQueue.length === 1) {
+      console.log("Running command:", this.cmdQueue[0]);
+      this.sendCommandToDebugger(this.cmdQueue[0]);
+    }
   }
 
   /**
@@ -359,10 +355,13 @@ export default class DebugSession extends events.EventEmitter {
    * @param token Token to be prefixed to the command string (must consist only of digits).
    * @returns A promise that will be resolved when the command response is received.
    */
-  public executeCommand(command: string, token?: string, immediate?: boolean): Promise<void> {
+  public executeCommand(command: string, token?: string, immediate?: boolean, isNative?: boolean): Promise<void> {
+    token = this.nextCmdId.toString();
+    this.nextCmdId++;
+    console.log("Executing command:", command, token);
     return new Promise<void>((resolve, reject) => {
       this.enqueueCommand(
-        new DebugCommand(command, token, (err, data) => { err ? reject(err) : resolve(); }),
+        new DebugCommand(command, token, (err, data) => { err ? reject(err) : resolve(); }, isNative),
         immediate
       );
     });
@@ -380,6 +379,8 @@ export default class DebugSession extends events.EventEmitter {
   private getCommandOutput<T>(command: string, token?: string, transformOutput?: (data: any) => T)
     : Promise<T> {
     return new Promise<T>((resolve, reject) => {
+      // token = this.nextCmdId.toString();
+      this.nextCmdId++;
       this.enqueueCommand(
         new DebugCommand(command, token, (err, data) => {
           console.log("Command output as:", data);
@@ -430,8 +431,8 @@ export default class DebugSession extends events.EventEmitter {
     // executable and symbol files to be specified separately the LLDB MI driver
     // currently (30-Mar-2015) only supports this one command.
 
-    
-    file=file.replace(/\\/g,'/');
+    console.log("Setting executable file to:", file);
+    // file=file.replace(/\\/g,'/');
     return this.executeCommand(`file-exec-and-symbols ${file}`);
   }
 
@@ -488,49 +489,49 @@ export default class DebugSession extends events.EventEmitter {
    *                            program every time it's hit.
    * @param options.threadId Restricts the new breakpoint to the given thread.
    */
-  addBreakpoint(
-    location: string,
-    options?: {
-      isTemp?: boolean;
-      isHardware?: boolean;
-      isPending?: boolean;
-      isDisabled?: boolean;
-      isTracepoint?: boolean;
-      condition?: string;
-      ignoreCount?: number;
-      threadId?: number;
-    }
-  ): Promise<IBreakpointInfo> {
-    var cmd: string = 'break-insert';
-    if (options) {
-      if (options.isTemp) {
-        cmd = cmd + ' -t';
-      }
-      if (options.isHardware) {
-        cmd = cmd + ' -h';
-      }
-      if (options.isPending) {
-        cmd = cmd + ' -f';
-      }
-      if (options.isDisabled) {
-        cmd = cmd + ' -d';
-      }
-      if (options.isTracepoint) {
-        cmd = cmd + ' -a';
-      }
-      if (options.condition) {
-        cmd = cmd + ' -c ' + options.condition;
-      }
-      if (options.ignoreCount !== undefined) {
-        cmd = cmd + ' -i ' + options.ignoreCount;
-      }
-      if (options.threadId !== undefined) {
-        cmd = cmd + ' -p ' + options.threadId;
-      }
-    }
+  // addBreakpoint(
+  //   location: string,
+  //   options?: {
+  //     isTemp?: boolean;
+  //     isHardware?: boolean;
+  //     isPending?: boolean;
+  //     isDisabled?: boolean;
+  //     isTracepoint?: boolean;
+  //     condition?: string;
+  //     ignoreCount?: number;
+  //     threadId?: number;
+  //   }
+  // ): Promise<IBreakpointInfo> {
+  //   var cmd: string = 'break-insert';
+  //   if (options) {
+  //     if (options.isTemp) {
+  //       cmd = cmd + ' -t';
+  //     }
+  //     if (options.isHardware) {
+  //       cmd = cmd + ' -h';
+  //     }
+  //     if (options.isPending) {
+  //       cmd = cmd + ' -f';
+  //     }
+  //     if (options.isDisabled) {
+  //       cmd = cmd + ' -d';
+  //     }
+  //     if (options.isTracepoint) {
+  //       cmd = cmd + ' -a';
+  //     }
+  //     if (options.condition) {
+  //       cmd = cmd + ' -c ' + options.condition;
+  //     }
+  //     if (options.ignoreCount !== undefined) {
+  //       cmd = cmd + ' -i ' + options.ignoreCount;
+  //     }
+  //     if (options.threadId !== undefined) {
+  //       cmd = cmd + ' -p ' + options.threadId;
+  //     }
+  //   }
 
-    return this.getCommandOutput<IBreakpointInfo>(cmd + ' ' + location, null, extractBreakpointInfo);
-  }
+  //   return this.getCommandOutput<IBreakpointInfo>(cmd + ' ' + location, null, extractBreakpointInfo);
+  // }
 
   /**
    * Removes a breakpoint.
@@ -652,14 +653,14 @@ export default class DebugSession extends events.EventEmitter {
    * @param stopAtStart *(GDB specific)* If `true` then execution will stop at the start
    *                    of the main function.
    */
-  startAllInferiors(stopAtStart?: boolean): Promise<void> {
-    var fullCmd: string = '-exec-run --all';
-    if (stopAtStart) {
-      fullCmd = fullCmd + ' --start';
-    }
+  // startAllInferiors(stopAtStart?: boolean): Promise<void> {
+  //   var fullCmd: string = '-exec-run --all';
+  //   if (stopAtStart) {
+  //     fullCmd = fullCmd + ' --start';
+  //   }
 
-    return this.executeCommand(fullCmd, null);
-  }
+  //   return this.executeCommand(fullCmd, null);
+  // }
 
   /**
    * Kills the currently selected inferior.
@@ -697,13 +698,18 @@ export default class DebugSession extends events.EventEmitter {
    *
    * @param reverse *(GDB specific)* If `true` the inferiors are executed in reverse.
    */
-  resumeAllThreads(reverse: boolean = false): Promise<void> {
-    var fullCmd: string = '-exec-continue --all';
-    if (reverse) {
-      fullCmd = fullCmd + ' --reverse';
-    }
+  // resumeAllThreads(reverse: boolean = false): Promise<void> {
+  //   var fullCmd: string = '-exec-continue --all';
+  //   if (reverse) {
+  //     fullCmd = fullCmd + ' --reverse';
+  //   }
 
-    return this.executeCommand(fullCmd, null);
+  //   return this.executeCommand(fullCmd, null);
+  // }
+
+  getExecFileName(): Promise<void> {
+    const fullCmd = "info sources";
+    return this.executeCommand(fullCmd);
   }
 
   /**
@@ -1073,65 +1079,65 @@ export default class DebugSession extends events.EventEmitter {
    *                           which the watch is created.
    *                           *Default*: `false`.
    */
-  addWatch(
-    expression: string,
-    options?: {
-      id?: string;
-      threadId?: number;
-      threadGroup?: string;
-      frameLevel?: number;
-      frameAddress?: string;
-      isFloating?: boolean;
-    }
-  ): Promise<IWatchInfo> {
-    var fullCmd: string = 'var-create';
-    var id = '-'; // auto-generate id
-    var addr = '*'; // use current frame
+  // addWatch(
+  //   expression: string,
+  //   options?: {
+  //     id?: string;
+  //     threadId?: number;
+  //     threadGroup?: string;
+  //     frameLevel?: number;
+  //     frameAddress?: string;
+  //     isFloating?: boolean;
+  //   }
+  // ): Promise<IWatchInfo> {
+  //   var fullCmd: string = 'var-create';
+  //   var id = '-'; // auto-generate id
+  //   var addr = '*'; // use current frame
 
-    if (options) {
-      if (options.id) {
-        id = options.id;
-      }
-      if (options.threadId !== undefined) {
-        fullCmd = fullCmd + ' --thread ' + options.threadId;
-      }
-      if (options.threadGroup) {
-        fullCmd = fullCmd + ' --thread-group ' + options.threadGroup;
-      }
-      if (options.frameLevel !== undefined) {
-        fullCmd = fullCmd + ' --frame ' + options.frameLevel;
-      }
-      if (options.isFloating === true) {
-        addr = '@';
-      } else if (options.frameAddress) {
-        addr = options.frameAddress;
-      }
-    }
+  //   if (options) {
+  //     if (options.id) {
+  //       id = options.id;
+  //     }
+  //     if (options.threadId !== undefined) {
+  //       fullCmd = fullCmd + ' --thread ' + options.threadId;
+  //     }
+  //     if (options.threadGroup) {
+  //       fullCmd = fullCmd + ' --thread-group ' + options.threadGroup;
+  //     }
+  //     if (options.frameLevel !== undefined) {
+  //       fullCmd = fullCmd + ' --frame ' + options.frameLevel;
+  //     }
+  //     if (options.isFloating === true) {
+  //       addr = '@';
+  //     } else if (options.frameAddress) {
+  //       addr = options.frameAddress;
+  //     }
+  //   }
 
-    fullCmd = fullCmd + ` ${id} ${addr} ${expression}`;
+  //   fullCmd = fullCmd + ` ${id} ${addr} ${expression}`;
 
-    return this.getCommandOutput(fullCmd, null, (output: any) => {
-      return {
-        id: output.name,
-        childCount: parseInt(output.numchild, 10),
-        value: output.value,
-        expressionType: output['type'],
-        threadId: parseInt(output['thread-id'], 10),
-        hasMoreChildren: output.has_more !== '0',
-        isDynamic: output.dynamic === '1',
-        displayHint: output.displayhint
-      };
-    });
-  }
+  //   return this.getCommandOutput(fullCmd, null, (output: any) => {
+  //     return {
+  //       id: output.name,
+  //       childCount: parseInt(output.numchild, 10),
+  //       value: output.value,
+  //       expressionType: output['type'],
+  //       threadId: parseInt(output['thread-id'], 10),
+  //       hasMoreChildren: output.has_more !== '0',
+  //       isDynamic: output.dynamic === '1',
+  //       displayHint: output.displayhint
+  //     };
+  //   });
+  // }
 
   /**
    * Destroys a previously created watch.
    *
    * @param id Identifier of the watch to destroy.
    */
-  removeWatch(id: string): Promise<void> {
-    return this.executeCommand('var-delete ' + id);
-  }
+  // removeWatch(id: string): Promise<void> {
+  //   return this.executeCommand('var-delete ' + id);
+  // }
 
   /**
    * Updates the state of an existing watch.
@@ -1578,26 +1584,26 @@ export default class DebugSession extends events.EventEmitter {
    * Gets information about all threads in all inferiors.
    * @returns A promise that will be resolved with information about all threads.
    */
-  getThreads(): Promise<IMultiThreadInfo> {
-    let fullCmd = '-thread-info';
-    // console.log("Running command: " + fullCmd);
-    return this.getCommandOutput(fullCmd, null, (output: any) => {
-      console.log("Result for:", fullCmd, output);
-      let currentThreadId: number = parseInt(output['current-thread-id'], 10);
-      if (Array.isArray(output.threads)) {
-        let currentThread: IThreadInfo;
-        let threads: IThreadInfo[] = output.threads.map((data: any) => {
-          let thread: IThreadInfo = extractThreadInfo(data);
-          if (thread.id === currentThreadId) {
-            currentThread = thread;
-          }
-          return thread;
-        });
-        return { all: threads, current: currentThread };
-      }
-      throw new MalformedResponseError('Expected to find "threads" list.', output, fullCmd);
-    });
-  }
+  // getThreads(): Promise<IMultiThreadInfo> {
+  //   let fullCmd = 'thread-info';
+  //   // console.log("Running command: " + fullCmd);
+  //   return this.getCommandOutput(fullCmd, null, (output: any) => {
+  //     console.log("Result for:", fullCmd, output);
+  //     let currentThreadId: number = parseInt(output['current-thread-id'], 10);
+  //     if (Array.isArray(output.threads)) {
+  //       let currentThread: IThreadInfo;
+  //       let threads: IThreadInfo[] = output.threads.map((data: any) => {
+  //         let thread: IThreadInfo = extractThreadInfo(data);
+  //         if (thread.id === currentThreadId) {
+  //           currentThread = thread;
+  //         }
+  //         return thread;
+  //       });
+  //       return { all: threads, current: currentThread };
+  //     }
+  //     throw new MalformedResponseError('Expected to find "threads" list.', output, fullCmd);
+  //   });
+  // }
   /**
    * Show a list of completions for partially typed CLI command.
    * @param input  input string

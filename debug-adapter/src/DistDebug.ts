@@ -18,11 +18,27 @@ import { DebugProtocol } from '@vscode/debugprotocol';
 import * as iconv from 'iconv-lite';
 import { TerminalEscape, TE_Style } from "./terminalEscape";
 import * as dbg from './dbgmits';
-import * as path from 'path';
-import { DDBSession, DDBSessionImpl } from './DDBSession';
+import { DDBSessionImpl } from './DDBSession';
 import { ILaunchRequestArguments, IAttachRequestArguments } from "./arguements"
-import { Subject } from 'await-notify';
+import fs = require('fs');
+import yaml = require('js-yaml');
+import * as Templates from "./templates";
+import * as utils from "./util";
 
+const moment = require('moment');
+
+class ExtendedVariable {
+  constructor(public name: string, public options: { "arg": any }) {
+  }
+}
+class VariableScope {
+  constructor(public readonly name: string, public readonly threadId: number, public readonly level: number) {
+  }
+
+  public static variableName(handle: number, name: string): string {
+    return `var_${handle}_${name}`;
+  }
+}
 
 enum EMsgType {
   info,	//black
@@ -35,10 +51,12 @@ enum EMsgType {
 const EVENT_CONFIG_DOWN = 'configdown';
 
 export class DistDebug extends DebugSession {
-  private _variableHandles = new Handles<string>();
+  private _variableHandles = new Handles<VariableScope | string | Templates.VariableObject | Templates.ExtendedVariable>();
+  private scopeHandlesReverse = {};
+  private variableHandlesReverse = {};
   private _locals: { frame?: dbg.IStackFrameInfo, vars: dbg.IVariableInfo[], watch: dbg.IWatchInfo[] } = { frame: null, vars: [], watch: [] };
 
-  private ddbServer!: DDBSession;
+  private ddbServer!: DDBSessionImpl;
   private _isRunning: boolean = false;
   private _isAttached = false;
   private _breakPoints = new Map<string, DebugProtocol.Breakpoint[]>();
@@ -52,7 +70,7 @@ export class DistDebug extends DebugSession {
   //default charset 
   private defaultStringCharset?: string;
 
-  private _configurationDone = new Subject();
+  private _configurationDone = false;
 
   private _cancellationTokens = new Map<number, boolean>();
 
@@ -88,7 +106,8 @@ export class DistDebug extends DebugSession {
     return new Promise<void>((resolve, reject) => {
       if (this._configurationDone) {
         resolve();
-      } else {
+      }
+      else {
         this.once(EVENT_CONFIG_DOWN, () => {
           resolve();
         });
@@ -157,9 +176,11 @@ export class DistDebug extends DebugSession {
     });
 
     //'step', 'breakpoint', 'exception', 'pause', 'entry', 'goto', 'function breakpoint', 'data breakpoint', 'instruction breakpoint'
-    this.ddbServer.on(dbg.EVENT_BREAKPOINT_HIT, (e: dbg.IBreakpointHitEvent) => {
-      console.log("\n\n\n\t\t\tBreakpoint hit on thread:", e.threadId);
-      this.sendEvent(new StoppedEvent('breakpoint', e.threadId));
+    this.ddbServer.on(dbg.EVENT_BREAKPOINT_HIT, (eventObj: { "thread-id": number, }) => {
+      console.log("\n\n\n\t\t\tBreakpoint hit on thread:", eventObj['thread-id']);
+      const event = new StoppedEvent('breakpoint', eventObj['thread-id']);
+      (event as DebugProtocol.StoppedEvent).body.allThreadsStopped = true; // this should be conditionally checked.
+      this.sendEvent(event);
     });
     this.ddbServer.on(dbg.EVENT_STEP_FINISHED, (e: dbg.IStepFinishedEvent) => {
       this.sendEvent(new StoppedEvent('step', e.threadId));
@@ -269,7 +290,6 @@ export class DistDebug extends DebugSession {
     response.body.supportSuspendDebuggee = true;
     response.body.supportTerminateDebuggee = true;
     response.body.supportsFunctionBreakpoints = true;
-    response.body.supportsDelayedStackTraceLoading = true;
 
     this.sendResponse(response);
 
@@ -283,11 +303,9 @@ export class DistDebug extends DebugSession {
    * Called at the end of the configuration sequence.
    * Indicates that all breakpoints etc. have been sent to the DA and that the 'launch' can start.
    */
-  protected configurationDoneRequest(response: DebugProtocol.ConfigurationDoneResponse, args: DebugProtocol.ConfigurationDoneArguments): void {
-    super.configurationDoneRequest(response, args);
-
-    // notify the launchRequest that configuration has finished
-    this._configurationDone.notify();
+  protected async configurationDoneRequest(response: DebugProtocol.ConfigurationDoneResponse, args: DebugProtocol.ConfigurationDoneArguments): Promise<void> {
+    console.log("Done setting entry breakpoint");
+    this.ddbServer.setConfigurationDone();
   }
 
   protected async disconnectRequest(response: DebugProtocol.DisconnectResponse, args: DebugProtocol.DisconnectArguments, request?: DebugProtocol.Request) {
@@ -314,7 +332,7 @@ export class DistDebug extends DebugSession {
 
   protected continueRequest(response: DebugProtocol.ContinueResponse, args: DebugProtocol.ContinueArguments): void {
     console.log("--- Resuming all threads (Resume execution -exec-run) ---", args); // supported
-    this.ddbServer.resumeAllThreads();
+    this.ddbServer.resumeThreads(args.threadId);
     this.sendResponse(response);
   }
 
@@ -332,7 +350,7 @@ export class DistDebug extends DebugSession {
   }
 
   protected stepOutRequest(response: DebugProtocol.StepOutResponse, args: DebugProtocol.StepOutArguments, request?: DebugProtocol.Request): void {
-    console.log("--- StepOut (Step Out of Function Calls -exec-finish -- up arrow) ---"); 
+    console.log("--- StepOut (Step Out of Function Calls -exec-finish -- up arrow) ---");
     this.ddbServer.stepOut();
     this.sendResponse(response);
   }
@@ -344,7 +362,7 @@ export class DistDebug extends DebugSession {
         if (e.name == "CommandFailedError") {
           this.printToDebugConsole(e.message, EMsgType.error);
         }
-        else 
+        else
           console.error(e);
       });
     this.sendResponse(response);
@@ -355,8 +373,19 @@ export class DistDebug extends DebugSession {
   }
 
   protected async launchRequest(response: DebugProtocol.LaunchResponse, _args: DebugProtocol.LaunchRequestArguments) {
-    console.log("org args:", _args);
     const args = _args as ILaunchRequestArguments;
+
+    try {
+      const doc = yaml.load(fs.readFileSync(args.configFile, 'utf8'));
+      const program = doc?.Components[0]?.bin
+      args.program = program;
+    }
+    catch (e) {
+      console.error("Error reading config file", e);
+      // this.sendErrorResponse(response, 500);
+      return;
+    }
+
     this.initDebugSession();
     // vscode.commands.executeCommand('workbench.panel.repl.view.focus');
     this.defaultStringCharset = args.defaultStringCharset;
@@ -370,14 +399,18 @@ export class DistDebug extends DebugSession {
     // wait until configuration has finished (and configurationDoneRequest has been called)
     try {
       args.cwd = "";
+
       await this.ddbServer.startDDB(args);
+
+
       console.log("Started DDB");
-      await this.waitForConfingureDone();
+      await this.ddbServer.waitForConfigureDone();
       console.log("Configuration done");
       //must wait for configure done. It will get error args without this.
-      //await this._startDone.wait(2000);
+      // await this._startDone.wait(2000);
       await this.ddbServer.waitForStart();
-      console.log("DDB start confirmed");
+      console.log("\n\n\nDDB start confirmed");
+      // await this.ddbServer.getExecFileName();
     } catch (error) {
       console.log("Caught error while launching debugger:", error);
       this.sendEvent(new TerminatedEvent(false));
@@ -387,26 +420,16 @@ export class DistDebug extends DebugSession {
     if (args.cwd) {
       await this.ddbServer.environmentCd(args.cwd);
     }
-    this.varUpperCase = args.varUpperCase;
-    if (args.commandsBeforeExec) {
-      for (const cmd of args.commandsBeforeExec) {
-        await this.ddbServer.execNativeCommand(cmd)
-          .catch((e) => {
-            this.printToDebugConsole(e.message, EMsgType.error);
-          });
-      }
-    }
-
-    // // WE DONT SET EXECUTABLE FILE HERE. WE SET IT IN THE CONFIG FILE. THIS IS JUST TO OPEN IT IN THE VS CODE
-    // // start the program 
-    let ret = await this.ddbServer.setExecutableFile(args.program)
-      .catch((e) => {
-
-        vscode.window.showErrorMessage("Failed to start the debugger." + e.message);
-        this.sendEvent(new TerminatedEvent(false));
-        this.printToDebugConsole(e.message, EMsgType.error);
-        return 1;
-      }) as number;
+    // this.varUpperCase = args.varUpperCase;
+    // if (args.commandsBeforeExec) {
+    //   for (const cmd of args.commandsBeforeExec) {
+    //     await this.ddbServer.execNativeCommand(cmd)
+    //       .catch((e) => {
+    //         this.printToDebugConsole(e.message, EMsgType.error);
+    //       });
+    //   }
+    // }
+    let ret = 0;
     console.log("Done setting executable");
 
     if (ret > 0) {
@@ -434,7 +457,7 @@ export class DistDebug extends DebugSession {
 
     // }
     console.log("Starting all inferiors");
-    await this.ddbServer.startAllInferiors(args.stopAtEntry)
+    await this.ddbServer.startAllInferiors(true)
       .catch((e) => {
         this.printToDebugConsole(e.message, EMsgType.error);
         vscode.window.showErrorMessage("Failed to start the debugger." + e.message);
@@ -450,7 +473,7 @@ export class DistDebug extends DebugSession {
 
   protected async setBreakPointsRequest(response: DebugProtocol.SetBreakpointsResponse, args: DebugProtocol.SetBreakpointsArguments): Promise<void> {
     // called by vscode when the user tries to set a breakpoint
-    console.log("VSCode requested breakpoints");
+    console.log("VSCode requested breakpoints", moment().format("mm:ss"));
 
     // confirm that the ddb is running
     await this.ddbServer.waitForStart();
@@ -461,57 +484,21 @@ export class DistDebug extends DebugSession {
       isPause = true;
     }
 
-    let srcpath = args.source.path as string;
-    srcpath = path.normalize(srcpath);
+    const filePath = args.source.path;
 
-    if (this._breakPoints.has(srcpath)) {
-      // since this works as a toggle, breakpoint is removed if it is already set
-      let bps: number[] = [];
-
-      const breakpoints = this._breakPoints.get(srcpath);
-      if (breakpoints) {
-        breakpoints.forEach(el => {
-          if (el && el.id) {
-            bps.push(el.id);
-          }
-        });
+    await this.ddbServer.clearBreakpoints(filePath);
+    const addBpPromises = args.breakpoints.map((bp) => {
+      return this.ddbServer.addBreakpoint({ file: filePath, line: bp.line });
+    })
+    const actualBreakpoints: DebugProtocol.Breakpoint[] = [];
+    const addBpRes = await Promise.all(addBpPromises);
+    console.log("All breakpoints set")
+    addBpRes.forEach((bp) => {
+      if (bp[0]) {
+        actualBreakpoints.push({ verified: true, line: bp[1]['original-location'] });
       }
-      this._breakPoints.set(srcpath, []);
-      this.ddbServer.removeBreakpoints(bps);
-
-    }
-
-    const clientLines = args.breakpoints || [];
-    const actualBreakpoints = await Promise.all(clientLines.map(async l => {
-      console.log("Adding breakpoint----")
-      let bk = await this.ddbServer.addBreakpoint(srcpath + ":" + this.convertClientLineToDebugger(l.line), {
-        isPending: true,
-        condition: l.condition
-      });
-      //console.log(bk);
-      const bp = new Breakpoint(false, this.convertDebuggerLineToClient(l.line)) as DebugProtocol.Breakpoint;
-      bp.source = args.source;
-      bp.verified = true;
-      bp.id = bk.id;
-      return bp;
-    })).then(res => {
-      console.log("All promises resolved");
-      return res;
     });
-    this._breakPoints.set(srcpath, actualBreakpoints);
-    console.log("::::::::isPause:", isPause);
-    if (isPause)
-      this.ddbServer.resumeAllThreads();
-    else {
-      // start all inferiors
-      console.log("Starting all inferiors after setting all breakpoints");
-      await this.ddbServer.startAllInferiors()
-        .catch((e) => {
-          this.printToDebugConsole(e.message, EMsgType.error);
-          vscode.window.showErrorMessage("Failed to start the debugger." + e.message);
-          this.sendEvent(new TerminatedEvent(false));
-        });
-    }
+
 
     response.body = {
       breakpoints: actualBreakpoints
@@ -519,8 +506,9 @@ export class DistDebug extends DebugSession {
     this.sendResponse(response);
   }
 
-  protected breakpointLocationsRequest(response: DebugProtocol.BreakpointLocationsResponse, args: DebugProtocol.BreakpointLocationsArguments, request?: DebugProtocol.Request): void {
+  protected breakpointLocationsRequest(response: DebugProtocol.BreakpointLocationsResponse, args: DebugProtocol.BreakpointLocationsArguments): void {
     // %IMPLEMENT
+    console.log("Breakpoint location requested");
     response.body = { breakpoints: [] };
     this.sendResponse(response);
   }
@@ -541,192 +529,112 @@ export class DistDebug extends DebugSession {
 
   protected async threadsRequest(response: DebugProtocol.ThreadsResponse): Promise<void> {
     console.log("Threads requested by vscode");
-    let threads: Thread[] = [];
-    let threadList = await this.ddbServer.getThreads();
-    console.log("Thread list:", threadList);
+    await this.ddbServer.waitForStart();
+    const threadList: { all: dbg.IThreadInfo[], current: dbg.IThreadInfo } = await this.ddbServer.getThreads();
 
     this._currentThreadId = threadList.current;
-    let idtype = 0;
-    if (threadList.current) {
-      if (threadList.current.targetId.startsWith('LWP')) {
-        idtype = 1;
-      } else if (threadList.current.targetId.startsWith('Thread')) {
-        idtype = 2;
-      }
-    }
-    threadList.all.forEach((th) => {
-      console.log(`current thread: ${th.targetId}`);
-      if (idtype == 1) {
-        let ids = th.targetId.split(' ');
-        let tid = Number.parseInt(ids[1]);
-        threads.push(new Thread(th.id, `Thread #${tid}`));
-      }
-      else if (idtype == 2) {
-        let ids = th.targetId.split('.');
-        let tid = Number.parseInt(ids[1]);
-        threads.push(new Thread(th.id, `Thread #${th.id} ${th.name ? th.name : ''}`));
-      }
-      else
-        threads.push(new Thread(th.id, th.targetId));
-
-
+    const threads: Thread[] = threadList.all.map(thread => {
+      const threadName = thread.name || thread.targetId;
+      return new Thread(thread.id, threadName)
     });
     response.body = {
       threads: threads
-    };
+    }
     this.sendResponse(response);
-
   }
 
   protected async stackTraceRequest(response: DebugProtocol.StackTraceResponse, args: DebugProtocol.StackTraceArguments): Promise<void> {
-    console.log("Stack trace requested by vscode", args.startFrame, args.levels);
-    const startFrame = typeof args.startFrame === 'number' ? args.startFrame : 0;
-    const maxLevels = typeof args.levels === 'number' ? args.levels : 1000;
-    const endFrame = startFrame + maxLevels;
-    const frames = await this.ddbServer.getStackFrames({ lowFrame: startFrame, highFrame: endFrame });
-
-    //remove watchs 
-    for (const watch of this._watchs) {
-      await this.ddbServer.removeWatch(watch[1].id).catch(() => { });;
-    }
-    this._watchs.clear();
-
-    response.body = {
-      stackFrames: frames.map(f => {
-        return new StackFrame(f.level, f.func, f.filename ? new Source(f.filename!, f.fullname) : null, this.convertDebuggerLineToClient(f.line!));
-      }),
-      totalFrames: frames.length
-    };
-    this.sendResponse(response);
+    console.log("Requested stack trace request");
+    const stacks = await this.ddbServer.getStackTrace(args.threadId, args.startFrame, args.levels);
+    const stackFrames = [];
+    stacks.forEach(stack => {
+      let source = new Source(stack.filename, stack.fullname);
+      const level = stack.level << 16 | args.threadId;
+      stackFrames.push(new StackFrame(level, `${stack.func}@${stack.address}`, source, stack.line, 0));
+    })
+    this.sendResponse({ ...response, body: { stackFrames } });
   }
 
   protected async scopesRequest(response: DebugProtocol.ScopesResponse, args: DebugProtocol.ScopesArguments) {
     console.log("\n\n\n\t\tScopes requested by vscode::", args.frameId);
-    this._currentFrameLevel = args.frameId;
-    response.body = {
-      scopes: [
-        {
-          name: "Locals",
-          presentationHint: "locals",
-          variablesReference: this._variableHandles.create("locals::"),
-          expensive: false
-        },
-      ]
-    };
-    this.sendResponse(response);
+    const scopes = [];
+    const [threadId, level] = [args.frameId & 0xFFFF, args.frameId >> 16];
+
+    const createScope = (scopeName: string, expensive: boolean) => {
+      const key = `${scopeName}:${threadId}:${level}`;
+      let handle: number;
+      if (this.scopeHandlesReverse.hasOwnProperty(key)) {
+        handle = this.scopeHandlesReverse[key];
+      }
+      else {
+        handle = this._variableHandles.create(new VariableScope(scopeName, threadId, level));
+        this.scopeHandlesReverse[key] = handle;
+      }
+      return new Scope(scopeName, handle, expensive);
+    }
+
+    scopes.push(createScope("Locals", false));
+    // scopes.push(createScope("Registers", false));
+
+    this.sendResponse({ ...response, body: { scopes } });
   }
 
   protected async variablesRequest(response: DebugProtocol.VariablesResponse, args: DebugProtocol.VariablesArguments, request?: DebugProtocol.Request) {
     console.log("--- Variables requested by vscode ---", this._variableHandles);
     const variables: DebugProtocol.Variable[] = [];
 
-    const id = this._variableHandles.get(args.variablesReference);
-
-    console.log("varible request id:", id);
-    if (id === 'locals::') {
-      for (const w of this._locals.watch) {
-        await this.ddbServer.removeWatch(w.id).catch(() => { });
-      }
-      this._locals.watch = [];
-
-      const vals = await this.ddbServer.getStackFrameVariables(dbg.VariableDetailLevel.Simple, {
-        frameLevel: this._currentFrameLevel,
-        threadId: this._currentThreadId?.id
-      });
-
-      this._locals.vars = vals.args.concat(vals.locals);
-
-      for (const v of this._locals.vars) {
-
-        const c = await this.ddbServer.addWatch(v.name, {
-          frameLevel: this._currentFrameLevel,
-          threadId: this._currentThreadId?.id
-        })
-          .catch();
-
-        console.log("Watcher returned:", c);
-
-        if (!c) {
-          continue;
-        }
-
-        this._locals.watch.push(c);
-
-        let vid = 0;
-        if (c.childCount > 0) {
-          vid = this._variableHandles.create(c.id);
-        }
-        variables.push({
-          name: v.name,
-          type: c.expressionType,
-          value: this.decodeString(c.value, c.expressionType),
-          variablesReference: vid
-        });
-
-      }
-
-    } else {
-
-      if (id.startsWith('**FLIST**')) {  //pascal TStringList
-        let vid = id.replace('**FLIST**', '');
-        let strs = vid.split(':');
-        let cnt = strs[strs.length - 1];
-
-        for (var i = 0; i < Number.parseInt(cnt); i++) {
-          let exp = strs[0] + '.FLIST^[' + i + ']';
-          let val = await this.ddbServer.evaluateExpression(exp);
-          let m = val.match(/'(.*?)'/);
-          if (m != null) {
-            val = m[1];
-          }
-          if (i > 100) {
-            variables.push({
-              name: '[.]',
-              type: 'string',
-              value: '...',
-              variablesReference: 0
-            });
-            break;
-          } else {
-            variables.push({
-              name: '[' + i + ']',
-              type: 'string',
-              value: this.decodeString(val, 'ANSISTRING'),
-              variablesReference: 0
-            });
-          }
-
-        }
-
-        //let s=await	this.dbgSession.evaluateExpression(id.replace('**items**',''));
-      } else {
-        let childs = await this.ddbServer.getWatchChildren(id, { detail: dbg.VariableDetailLevel.All }).catch((e) => {
-          return [];
-        });
-        for (const c of childs) {
-          let vid = 0;
-
-          if (c.childCount > 0) {
-            vid = this._variableHandles.create(c.id);
-          }
-
-          variables.push({
-            name: c.expression,
-            type: c.expressionType,
-            value: this.decodeString(c.value, c.expressionType),
-            variablesReference: vid
-          });
-
-        }
-      }
-
+    const createVariable = (name: string | Templates.VariableObject, options?: any) => {
+      if (options)
+        return this._variableHandles.create(new ExtendedVariable(typeof name === 'string' ? name : name.name, options));
+      else
+        return this._variableHandles.create(name);
     }
 
-    response.body = {
-      variables: variables
-    };
-    console.log("Final variables as:", variables);
-    this.sendResponse(response);
+    const id: VariableScope | string | Templates.ExtendedVariable | Templates.VariableObject = this._variableHandles.get(args.variablesReference);
+    if (id instanceof VariableScope && id.name === "Locals") {
+
+      for (const watch of this._locals.watch) {
+        await this.ddbServer.removeWatch(watch.id).catch();
+      }
+
+      this._locals.watch = [];
+      const vars = await this.ddbServer.getStackVariables(id.threadId, id.level);
+      this._locals.vars = vars
+      for (const variable of this._locals.vars) {
+        // const watch = await this.ddbServer.addWatch(variable.name, this._currentThreadId?.id, this._currentFrameLevel).catch()
+
+        // if (!watch) continue;
+
+        // this._locals.watch.push(watch);
+
+        // let vid = 0;
+        // if (watch.childCount > 0)
+        //   vid = this._variableHandles.create(watch.id);
+        let varRef: number = 0;
+        if (variable.value === undefined) {
+          variable.value = '<unknown>';
+          varRef = createVariable(variable.name);
+        }
+        else {
+          let expanded = utils.expandValue(createVariable, `${variable.name}=${variable.value}`, "", variable.raw);
+          if (expanded) {
+            if (typeof expanded[0] === "string"){
+              // variable.name = "<value>";
+              variable.value = utils.prettyStringArray(variable.value);
+            }
+          }
+        }
+
+        variables.push({
+          name: variable.name,
+          type: variable.type,
+          value: variable.value,
+          variablesReference: varRef,
+        });
+      }
+    }
+
+    this.sendResponse({ ...response, body: { variables } });
   }
 
   private decodeString(value?: string, expressionType?: string): string {
