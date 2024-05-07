@@ -65,7 +65,7 @@ export class DDBSessionImpl extends DebugSession {
         });
 
         this.debuggerProcess?.on('close', () => {
-          reject();
+          reject("something");
         });
       }
     });
@@ -92,9 +92,9 @@ export class DDBSessionImpl extends DebugSession {
     let debuggerArgs: string[] = args.debuggerArgs ? args.debuggerArgs : [];
     this.target_pid = undefined;
 
-    const debuggerFilename = 'python3.9';
+    const debuggerFilename = 'python3';
 
-    debuggerArgs = debuggerArgs.concat(["/home/ubuntu/USC-NSL/distributed-debugger/py_testing/main.py"]);
+    debuggerArgs = debuggerArgs.concat(["/proj/flashburst-PG0/code/distributed-debugger/py_testing/main.py"]);
     debuggerArgs = debuggerArgs.concat([args.configFile]);
     // debuggerArgs = debuggerArgs.concat(['/home/ubuntu/USC-NSL/distributed-debugger/py_testing/configs/dbg_multithread_print.yaml']);
 
@@ -207,7 +207,7 @@ export class DDBSessionImpl extends DebugSession {
   private stdout(data: Buffer) {
     this.lastOpTime = Date.now();
     const op = data.toString("utf-8");
-    // console.log("Got op:", op);
+    console.log("Got op:", op);
     // this.opBuffer += op;
     this.parseOutput(op);
   }

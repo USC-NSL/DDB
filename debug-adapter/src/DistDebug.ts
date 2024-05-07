@@ -476,7 +476,7 @@ export class DistDebug extends DebugSession {
     console.log("VSCode requested breakpoints", moment().format("mm:ss"));
 
     // confirm that the ddb is running
-    await this.ddbServer.waitForStart();
+    await this.ddbServer.waitForStart().catch(console.log);
 
     let isPause = false;
     if (this._isRunning) {

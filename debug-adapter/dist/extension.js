@@ -19953,7 +19953,7 @@ var DDBSessionImpl = class extends DebugSession {
           return resolve();
         });
         this.debuggerProcess?.on("close", () => {
-          reject();
+          reject("something");
         });
       }
     });
@@ -19975,8 +19975,8 @@ var DDBSessionImpl = class extends DebugSession {
     console.log("Starting DDB...", args.configFile);
     let debuggerArgs = args.debuggerArgs ? args.debuggerArgs : [];
     this.target_pid = void 0;
-    const debuggerFilename = "python3.9";
-    debuggerArgs = debuggerArgs.concat(["/home/ubuntu/USC-NSL/distributed-debugger/py_testing/main.py"]);
+    const debuggerFilename = "python3";
+    debuggerArgs = debuggerArgs.concat(["/proj/flashburst-PG0/code/distributed-debugger/py_testing/main.py"]);
     debuggerArgs = debuggerArgs.concat([args.configFile]);
     this.debuggerProcess = (0, import_child_process.spawn)(debuggerFilename, debuggerArgs);
     console.log("Started debugger process: ", this.debuggerProcess);
@@ -20060,6 +20060,7 @@ var DDBSessionImpl = class extends DebugSession {
   stdout(data) {
     this.lastOpTime = Date.now();
     const op = data.toString("utf-8");
+    console.log("Got op:", op);
     this.parseOutput(op);
   }
   async addBreakpoint(breakpoint) {
@@ -20576,7 +20577,7 @@ var DistDebug = class extends import_debugadapter2.DebugSession {
   }
   async setBreakPointsRequest(response, args) {
     console.log("VSCode requested breakpoints", moment2().format("mm:ss"));
-    await this.ddbServer.waitForStart();
+    await this.ddbServer.waitForStart().catch(console.log);
     let isPause = false;
     if (this._isRunning) {
       await this.ddbServer.pause();
