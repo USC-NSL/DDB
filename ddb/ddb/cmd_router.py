@@ -17,27 +17,19 @@ from ddb.response_transformer import BacktraceReadableTransformer, ProcessInfoTr
 '''
 
 def extract_remote_parent_data(data):
-    try:
-        metadata = data.get('metadata', {})
-        parent_rip = metadata.get('parentRIP', -1)
-        parent_rsp = metadata.get('parentRSP', -1)
-        parent_addr = metadata.get('parentAddr', [])
-        parent_port = metadata.get('parentPort', -1)
-        parent_addr_str = '.'.join(str(octet) for octet in parent_addr[-4:])
+    metadata = data.get('metadata', {})
+    parent_rip = metadata.get('parentRIP', '-1')
+    parent_rsp = metadata.get('parentRSP', '-1')
+    parent_addr = metadata.get('parentAddr', [])
+    parent_port = metadata.get('parentPort', '-1')
+    parent_addr_str = '.'.join(str(octet) for octet in parent_addr[-4:])
 
-        return {
-            'parent_rip': parent_rip,
-            'parent_rsp': parent_rsp,
-            'parent_addr': parent_addr_str,
-            'parent_port': parent_port
-        }
-    except (KeyError, TypeError):
-        return {
-            'parent_rip': 'N/A',
-            'parent_rsp': 'N/A',
-            'parent_addr': 'N/A',
-            'parent_port': 'N/A'
-        }
+    return {
+        'parent_rip': parent_rip,
+        'parent_rsp': parent_rsp,
+        'parent_addr': parent_addr_str,
+        'parent_port': parent_port
+    }
 
 
 remoteBt = True
