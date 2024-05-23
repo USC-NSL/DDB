@@ -22,7 +22,7 @@ import argparse
 #     debugpy.wait_for_client()
 # except Exception as e:
 #     print(f"Failed to attach debugger: {e}")
-
+gdb_manager:GdbManager=None
 def exec_cmd(cmd: Union[List[str], str]):
     if isinstance(cmd, str):
         cmd = [cmd]
@@ -66,9 +66,10 @@ def exec_posttasks(config_data):
         for task in tasks:
             exec_task(task)
 
-def bootFromNuConfig(gdb_manager: GdbManager=None, config_data=None):
+def bootFromNuConfig(config_data=None):
     gdbSessionConfigs: List[GdbSessionConfig] = []
     prerun_cmds = None
+    global gdb_manager
     if config_data:
         components = config_data["Components"] if "Components" in config_data else []
         prerun_cmds = config_data["PrerunGdbCommands"] if "PrerunGdbCommands" in config_data else None
@@ -110,10 +111,10 @@ def bootFromNuConfig(gdb_manager: GdbManager=None, config_data=None):
         cmd = f"{cmd}\n"
         gdb_manager.write(cmd)
 
-def bootServiceWeaverKube(gdb_manager: GdbManager=None, config_data=None):
+def bootServiceWeaverKube(config_data=None):
     from kubernetes import config as kubeconfig, client as kubeclient
-    from gdbserver_starter import KubeRemoteSeverClient
-
+    from ddb.gdbserver_starter import KubeRemoteSeverClient
+    global gdb_manager
     kubeconfig.load_incluster_config()
     clientset = kubeclient.CoreV1Api()
     prerun_cmds = config_data.get("PrerunGdbCommands",[])
@@ -218,9 +219,9 @@ if __name__ == "__main__":
     terminated=False
     try:
         if config_data["Framework"] == "serviceweaver_kube":
-            bootServiceWeaverKube(gdb_manager, config_data)
+            bootServiceWeaverKube(config_data)
         elif config_data["Framework"] == "Nu":
-            bootFromNuConfig(gdb_manager, config_data)
+            bootFromNuConfig(config_data)
     except KeyboardInterrupt:
         pass
         
