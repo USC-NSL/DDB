@@ -23,6 +23,7 @@ import argparse
 # except Exception as e:
 #     print(f"Failed to attach debugger: {e}")
 gdb_manager:GdbManager=None
+
 def exec_cmd(cmd: Union[List[str], str]):
     if isinstance(cmd, str):
         cmd = [cmd]
@@ -184,7 +185,8 @@ def handle_interrupt(signal_num, frame):
             sys.exit(130)
         except SystemExit:
             os._exit(130)
-if __name__ == "__main__":
+
+def main():
     signal.signal(signal.SIGINT, handle_interrupt)
     parser = argparse.ArgumentParser(
         description="interactive debugging for distributed software.",
@@ -222,7 +224,10 @@ if __name__ == "__main__":
             bootServiceWeaverKube(config_data)
         elif config_data["Framework"] == "Nu":
             bootFromNuConfig(config_data)
+        else:
+            bootFromNuConfig(config_data)
     except KeyboardInterrupt:
         pass
-        
-    
+
+if __name__ == "__main__":
+    main()

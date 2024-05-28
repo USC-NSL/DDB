@@ -91,10 +91,10 @@ class CmdRouter:
         print("current cmd:", cmd)
         token, cmd_no_token, prefix, cmd = parse_cmd(cmd) 
         cmd = f"{token}{cmd_no_token}\n"
-        
+
         if (prefix in ["b", "break", "-break-insert"]):
             self.broadcast(token, cmd)
-        elif (cmd_no_token in ["-bt-remote"]):
+        elif (prefix in ["-bt-remote"]):
             aggreated_bt_result = []
             bt_result = await self.send_to_current_thread_async(token, f"{token}-stack-list-frames")
             assert(len(bt_result) == 1)
