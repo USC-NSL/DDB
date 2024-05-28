@@ -476,7 +476,7 @@ export class DistDebug extends DebugSession {
     console.log("VSCode requested breakpoints", moment().format("mm:ss"));
 
     // confirm that the ddb is running
-    await this.ddbServer.waitForStart();
+    await this.ddbServer.waitForStart().catch(console.log)
 
     let isPause = false;
     if (this._isRunning) {
@@ -637,33 +637,33 @@ export class DistDebug extends DebugSession {
     this.sendResponse({ ...response, body: { variables } });
   }
 
-  private decodeString(value?: string, expressionType?: string): string {
+  // private decodeString(value?: string, expressionType?: string): string {
 
-    if (expressionType === undefined) {
-      return '';
-    }
+  //   if (expressionType === undefined) {
+  //     return '';
+  //   }
 
-    console.log("Decoding string with current language as:", this.language, expressionType);
-    if (this.defaultStringCharset) {
-      if (expressionType.endsWith('char *')) {
-        let val = value;
+  //   console.log("Decoding string with current language as:", this.language, expressionType);
+  //   if (this.defaultStringCharset) {
+  //     if (expressionType.endsWith('char *')) {
+  //       let val = value;
 
-        val = val.replace(/\\(\d+)/g, (s, args) => {
-          let num = parseInt(args, 8);
-          return String.fromCharCode(num);
-        });
-        if (val.endsWith("'")) {
-          val = val.substring(0, val.length - 1);
-        }
+  //       val = val.replace(/\\(\d+)/g, (s, args) => {
+  //         let num = parseInt(args, 8);
+  //         return String.fromCharCode(num);
+  //       });
+  //       if (val.endsWith("'")) {
+  //         val = val.substring(0, val.length - 1);
+  //       }
 
-        let bf = val.split('').map((e) => { return e.charCodeAt(0); });
+  //       let bf = val.split('').map((e) => { return e.charCodeAt(0); });
 
-        return iconv.decode(Buffer.from(bf), this.defaultStringCharset);
-      }
-    }
-    return value;
+  //       return iconv.decode(Buffer.from(bf), this.defaultStringCharset);
+  //     }
+  //   }
+  //   return value;
 
-  }
+  // }
 
   protected dataBreakpointInfoRequest(response: DebugProtocol.DataBreakpointInfoResponse, args: DebugProtocol.DataBreakpointInfoArguments): void {
 

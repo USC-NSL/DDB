@@ -65,7 +65,7 @@ export class DDBSessionImpl extends DebugSession {
         });
 
         this.debuggerProcess?.on('close', () => {
-          reject();
+          reject("Not started yet.");
         });
       }
     });
@@ -92,7 +92,7 @@ export class DDBSessionImpl extends DebugSession {
     let debuggerArgs: string[] = args.debuggerArgs ? args.debuggerArgs : [];
     this.target_pid = undefined;
 
-    const debuggerFilename = 'python3.9';
+    const debuggerFilename = 'sudo python3.9';
 
     debuggerArgs = debuggerArgs.concat(["/home/ubuntu/USC-NSL/distributed-debugger/py_testing/main.py"]);
     debuggerArgs = debuggerArgs.concat([args.configFile]);
@@ -207,7 +207,7 @@ export class DDBSessionImpl extends DebugSession {
   private stdout(data: Buffer) {
     this.lastOpTime = Date.now();
     const op = data.toString("utf-8");
-    // console.log("Got op:", op);
+    console.log("Got op:", op);
     // this.opBuffer += op;
     this.parseOutput(op);
   }
