@@ -130,7 +130,7 @@ class GdbSession:
             self.write(prerun_cmd["command"])
         self.write(f"-target-select remote {self.remote_host}:{self.remote_port}")
 
-    def start(self) -> None:
+    async def start(self) -> None:
         if self.mode == GdbMode.LOCAL:
             self.local_start()
         elif self.mode == GdbMode.REMOTE:
