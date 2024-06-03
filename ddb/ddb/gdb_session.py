@@ -129,7 +129,7 @@ class GdbSession:
         full_args.extend([ "-ex", f"target remote {self.remote_host}:{self.remote_port}" ])
         self.session_ctrl = GdbController(full_args)
 
-    def start(self) -> None:
+    async def start(self) -> None:
         if self.mode == GdbMode.LOCAL:
             self.local_start()
         elif self.mode == GdbMode.REMOTE:
