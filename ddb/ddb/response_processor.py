@@ -6,7 +6,6 @@ from ddb.state_manager import StateManager, ThreadStatus
 from ddb.data_struct import SessionResponse
 from ddb.response_transformer import GenericStopAsyncRecordTransformer, ResponseTransformer, RunningAsyncRecordTransformer, StopAsyncRecordTransformer, ThreadCreatedNotifTransformer, ThreadGroupNotifTransformer
 
-
 class ResponseProcessor:
     _instance: "ResponseProcessor" = None
     _lock = Lock()
@@ -46,8 +45,9 @@ class ResponseProcessor:
                 self.handle_result(resp)
 
     def handle_result(self, response: SessionResponse):
-        # dev_print("result")
-        CmdTracker.inst().recv_response(response)
+        cmd_meta = CmdTracker.inst().recv_response(response)
+        if cmd_meta:
+            ResponseTransformer.transform(cmd_meta.responses, cmd_meta.transformer)
 
     def handle_notify(self, response: SessionResponse):
         sid = response.sid

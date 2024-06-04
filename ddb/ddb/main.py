@@ -10,13 +10,11 @@ import asyncio
 
 from typing import List, Union
 
-from ddb.data_struct import TargetFramework
+from ddb.state_manager import StateManager
 from ddb.gdb_manager import GdbManager
 from ddb.logging import logger
 from ddb.utils import *
 from ddb.config import GlobalConfig
-
-ASYNC_MODE = True
 
 def exec_cmd(cmd: Union[List[str], str]):
     if isinstance(cmd, str):
@@ -28,7 +26,6 @@ def exec_cmd(cmd: Union[List[str], str]):
     )
     eprint(result.stdout.decode("utf-8"))
     eprint(result.stderr.decode("utf-8"))
-
 
 def exec_task(task: dict):
     name = None
@@ -59,24 +56,37 @@ def exec_posttasks(config_data):
         for task in tasks:
             exec_task(task)
 
-async def bootFromNuConfig(gdb_manager: GdbManager):
+async def boot(gdb_manager: GdbManager):
     await gdb_manager.start()
     while True:
-        cmd = await asyncio.get_event_loop().run_in_executor(None, input, "(gdb) ")
+        cur_tid = StateManager.inst().get_current_gthread()
+        cmd = input(f"{cur_tid} (gdb) ")
         # cmd = input("(gdb) ").strip()
         cmd = f"{cmd.strip()}\n"
-        if ASYNC_MODE:
-            asyncio.create_task(gdb_manager.write(cmd))
-        else:
-            await gdb_manager.write(cmd)
+        # await gdb_manager.write(cmd)
+        # if GlobalConfig.get().async_mode:
+        #     asyncio.create_task(gdb_manager.write(cmd))
+        # else:
+        #     await gdb_manager.write(cmd)
 
-async def bootServiceWeaverKube(gdb_manager: GdbManager):
-    gdb_manager.start()
-    while True:
-        cmd = input(f"({gdb_manager.state_mgr.get_current_gthread()})(gdb) ").strip()
-        cmd = f"{cmd}\n"
-        if cmd is not None:
-            gdb_manager.write(cmd)
+# async def bootFromNuConfig(gdb_manager: GdbManager):
+#     await gdb_manager.start()
+#     while True:
+#         cmd = await asyncio.get_event_loop().run_in_executor(None, input, "(gdb) ")
+#         # cmd = input("(gdb) ").strip()
+#         cmd = f"{cmd.strip()}\n"
+#         if ASYNC_MODE:
+#             asyncio.create_task(gdb_manager.write(cmd))
+#         else:
+#             await gdb_manager.write(cmd)
+
+# async def bootServiceWeaverKube(gdb_manager: GdbManager):
+#     gdb_manager.start()
+#     while True:
+#         cmd = input(f"({gdb_manager.state_mgr.get_current_gthread()})(gdb) ").strip()
+#         cmd = f"{cmd}\n"
+#         if cmd is not None:
+#             gdb_manager.write(cmd)
 
 terminated = False
 gdb_manager: GdbManager = None
@@ -129,12 +139,7 @@ async def main_async():
 
     global_config = GlobalConfig.get()
     try:
-        if global_config.framework == TargetFramework.SERVICE_WEAVER_K8S:
-            await bootServiceWeaverKube(gdb_manager)
-        elif global_config.framework == TargetFramework.NU:
-            await bootFromNuConfig(gdb_manager)
-        else:
-            await bootFromNuConfig(gdb_manager)
+        await boot(gdb_manager) 
     except KeyboardInterrupt:
         logger.info("Received interrupt signal. Exiting...")
 

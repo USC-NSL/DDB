@@ -1,5 +1,6 @@
-import threading
+# import threading
 import os
+import asyncio
 from uuid import uuid4
 from typing import List, Optional
 from threading import Thread, Lock
@@ -66,8 +67,8 @@ class GdbSession:
 
         self.session_ctrl: Optional[GdbController] = None
         self.processor = ResponseProcessor.inst()
-        self.mi_output_t_handle = None
-        self._stop_event = threading.Event()
+        self.mi_output_task = None
+        self._stop_event = asyncio.Event()
 
     def get_mi_version_arg(self) -> str:
         return f"--interpreter={self.mi_version}"
@@ -148,12 +149,9 @@ class GdbSession:
 
         self.state_mgr.register_session(self.sid, self.tag)
 
-        self.mi_output_t_handle = Thread(
-            target=self.fetch_mi_output, args=()
-        )
-        self.mi_output_t_handle.start()
+        self.mi_output_task = asyncio.create_task(self.fetch_mi_output())
 
-    def fetch_mi_output(self):
+    async def fetch_mi_output(self):
         while not self._stop_event.is_set():
             responses = self.session_ctrl.get_gdb_response(
                 timeout_sec=0.5, raise_error_on_timeout=False)
@@ -205,8 +203,6 @@ class GdbSession:
         return f"[ {self.tag}, {self.bin}, {self.sid} ]"
 
     def cleanup(self):
-        self._stop_event.set()
-        sleep(1) # wait to let fetch thread to stop
         logger.debug(
             f"Exiting gdb/mi controller - \n\ttag: {self.tag}, \n\tbin: {self.bin}"
         )
@@ -214,6 +210,8 @@ class GdbSession:
             # try-except in case the gdb is already killed or exited.
             response = self.session_ctrl.write("kill", read_response=True)
             logger.debug(f"kill response: {response}")
+            self._stop_event.set()
+            sleep(1) # wait to let fetch thread to stop
             self.session_ctrl.exit()
         except Exception as e:
             logger.debug(f"Failed to clean up gdb: {e}")

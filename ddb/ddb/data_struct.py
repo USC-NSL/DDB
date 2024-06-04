@@ -77,6 +77,7 @@ class DDBConfig:
     framework = TargetFramework.UNSPECIFIED
     gdb_sessions_configs: List[GdbSessionConfig] = field(default_factory=list)
     broker: BrokerInfo = None
+    async_mode: bool = True
 
     def __repr__(self):
         formatted_dict = pformat(self.__dict__)
