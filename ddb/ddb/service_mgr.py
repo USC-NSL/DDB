@@ -75,34 +75,6 @@ class ServiceManager:
         msg = message.payload.decode()
         logger.debug(f"Receive new service msg: {msg}")
         parts = msg.split(":")
-
-        """ #1 directly run the callback in the running loop
-        """
-        # GlobalRunningLoop().get_loop().run_in_executor(
-        #     None, userdata[ON_NEW_SERVICE_CALLBACK_HANDLE],
-        #     ServiceInfo(
-        #         ip=ip_int2ip_str(int(parts[0])), # ip addr embedded in the message is in integer format, convert it to human-readable string
-        #         tag=str(parts[1]), 
-        #         pid=int(parts[2])
-        #     )
-        # )
-
-        """ #2 Run callback with run_coroutine_threadsafe
-                This is incorrect as the callback is not a coroutine
-        """
-        # asyncio.run_coroutine_threadsafe(
-        #     ServiceInfo(
-        #         ip=ip_int2ip_str(int(parts[0])), # ip addr embedded in the message is in integer format, convert it to human-readable string
-        #         tag=str(parts[1]), 
-        #         pid=int(parts[2])
-        #     ),
-        #     GlobalRunningLoop().get_loop()
-        # )
-
-        """ #3 directly run the callback, which definitely won't work
-            start() will call register_cmd() which uses SessionMeta.
-            SessionMeta assume the existence of a asyncio loop.
-        """
         userdata[ON_NEW_SERVICE_CALLBACK_HANDLE](
             ServiceInfo(
                 ip=ip_int2ip_str(int(parts[0])), # ip addr embedded in the message is in integer format, convert it to human-readable string
@@ -110,27 +82,6 @@ class ServiceManager:
                 pid=int(parts[2])
             )
         )
-
-        """ #4 Manually create a event loop of doesn't exist already.
-            This still doesn't make sense as we need to submit the task to the same running loop.
-            Also, the callback is not a coroutine.
-            run_until_complete() should take a awaitable task.
-        """
-        # try:
-        #     loop = asyncio.get_event_loop()
-        # except RuntimeError:
-        #     loop = asyncio.new_event_loop()
-        #     asyncio.set_event_loop(loop)
-
-        # loop.run_until_complete(
-        #     userdata[ON_NEW_SERVICE_CALLBACK_HANDLE](
-        #         ServiceInfo(
-        #             ip=ip_int2ip_str(int(parts[0])), # ip addr embedded in the message is in integer format, convert it to human-readable string
-        #             tag=str(parts[1]), 
-        #             pid=int(parts[2])
-        #         )
-        #     )
-        # )
         
     def __on_connect(client: paho.Client, userdata, flags, rc, properties):
         if rc == 0:
