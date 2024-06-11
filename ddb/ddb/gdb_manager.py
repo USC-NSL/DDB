@@ -16,8 +16,9 @@ class GdbManager:
     def __init__(self) -> None:
         self.lock = Lock()
         self.sessions: List[GdbSession] = []
+        self._event_loop = asyncio.get_event_loop()
 
-    def start(self)->None:
+    async def start(self)->None:
         global_config = GlobalConfig.get()
         if global_config.broker:
             logger.debug("Broker is enabled. Starting ServiceManager.")
@@ -30,16 +31,20 @@ class GdbManager:
         self.router = CmdRouter(self.sessions)
         self.state_mgr = StateManager.inst()
 
-        [ s.start() for s in self.sessions ]
+        # [ s.start() for s in self.sessions ]
+        await asyncio.gather(*[s.start() for s in self.sessions])
 
-    def write(self, cmd: str):
+    async def write(self, cmd: str):
         # if cmd.strip() and cmd.split()[0] == "session":
         #     selection = int(cmd.split()[1])
         #     self.state_mgr.set_current_session(selection)
         #     dev_print(f"selected session {self.state_mgr.get_current_session()}.")
         # else:
         #asyncio.run_coroutine_threadsafe(self.router.send_cmd(cmd), self.router.loop).result()
-        asyncio.run_coroutine_threadsafe(self.router.send_cmd(cmd), self.router.event_loop_thread.loop)
+
+        # asyncio.run_coroutine_threadsafe(self.router.send_cmd(cmd), self.router.event_loop_thread.loop)
+        await self.router.send_cmd(cmd)
+
         # for s in self.sessions:
         #     s.write(cmd)
 
@@ -48,7 +53,7 @@ class GdbManager:
         #     resp = session.write(cmd)
         #     responses.append(resp)
 
-    def __discover_new_session(self, session_info: ServiceInfo):
+    async def __discover_new_session(self, session_info: ServiceInfo):
         logger.debug(f"In GdbManager. New session discovered: {session_info}")
         port = 8989
         hostname = session_info.ip
@@ -90,10 +95,17 @@ class GdbManager:
         # start the session: 
         # 1. start gdbserver on the remote 
         # 2. start local gdb process and attach
-        gdb_session.start()
+        self._event_loop.create_task(gdb_session.start())
+        # loop = asyncio.get_event_loop()
+        # if loop.is_running():
+        #     # If there's already a running event loop, use `run_until_complete`
+        #     loop.run_until_complete(gdb_session.start())
+        # else:
+        #     # Otherwise, start a new event loop
+        #     loop.create_task(gdb_session.start())
 
     def cleanup(self):
-        dev_print("Cleaning up GdbManager resource")
+        logger.debug("Cleaning up GdbManager resource")
         for s in self.sessions:
             s.cleanup()
 

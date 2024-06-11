@@ -6,23 +6,15 @@ import signal
 import subprocess
 import sys
 import argparse
+import asyncio
 
 from typing import List, Union
 
-from ddb.data_struct import TargetFramework
+from ddb.state_manager import StateManager
 from ddb.gdb_manager import GdbManager
 from ddb.logging import logger
-from ddb.gdb_session import GdbMode, GdbSessionConfig, StartMode
 from ddb.utils import *
 from ddb.config import GlobalConfig
-# import debugpy
-
-# try:
-#     debugpy.listen(("localhost", 5678))
-#     print("Waiting for debugger attach")
-#     debugpy.wait_for_client()
-# except Exception as e:
-#     print(f"Failed to attach debugger: {e}")
 
 def exec_cmd(cmd: Union[List[str], str]):
     if isinstance(cmd, str):
@@ -34,7 +26,6 @@ def exec_cmd(cmd: Union[List[str], str]):
     )
     eprint(result.stdout.decode("utf-8"))
     eprint(result.stderr.decode("utf-8"))
-
 
 def exec_task(task: dict):
     name = None
@@ -65,20 +56,37 @@ def exec_posttasks(config_data):
         for task in tasks:
             exec_task(task)
 
-def bootFromNuConfig(gdb_manager: GdbManager):
-    gdb_manager.start()
+async def boot(gdb_manager: GdbManager):
+    await gdb_manager.start()
     while True:
-        cmd = input("(gdb) ").strip()
-        cmd = f"{cmd}\n"
-        gdb_manager.write(cmd)
+        cur_tid = StateManager.inst().get_current_gthread()
+        cmd = input(f"{cur_tid} (gdb) ")
+        # cmd = input("(gdb) ").strip()
+        cmd = f"{cmd.strip()}\n"
+        # await gdb_manager.write(cmd)
+        # if GlobalConfig.get().async_mode:
+        #     asyncio.create_task(gdb_manager.write(cmd))
+        # else:
+        #     await gdb_manager.write(cmd)
 
-def bootServiceWeaverKube(gdb_manager: GdbManager):
-    gdb_manager.start()
-    while True:
-        cmd = input(f"({gdb_manager.state_mgr.get_current_gthread()})(gdb) ").strip()
-        cmd = f"{cmd}\n"
-        if cmd is not None:
-            gdb_manager.write(cmd)
+# async def bootFromNuConfig(gdb_manager: GdbManager):
+#     await gdb_manager.start()
+#     while True:
+#         cmd = await asyncio.get_event_loop().run_in_executor(None, input, "(gdb) ")
+#         # cmd = input("(gdb) ").strip()
+#         cmd = f"{cmd.strip()}\n"
+#         if ASYNC_MODE:
+#             asyncio.create_task(gdb_manager.write(cmd))
+#         else:
+#             await gdb_manager.write(cmd)
+
+# async def bootServiceWeaverKube(gdb_manager: GdbManager):
+#     gdb_manager.start()
+#     while True:
+#         cmd = input(f"({gdb_manager.state_mgr.get_current_gthread()})(gdb) ").strip()
+#         cmd = f"{cmd}\n"
+#         if cmd is not None:
+#             gdb_manager.write(cmd)
 
 terminated = False
 gdb_manager: GdbManager = None
@@ -102,6 +110,9 @@ def handle_interrupt(signal_num, frame):
             os._exit(130)
 
 def main():
+    asyncio.run(main_async())
+
+async def main_async():
     global gdb_manager, terminated
     gdb_manager=GdbManager()
     signal.signal(signal.SIGINT, handle_interrupt)
@@ -128,12 +139,7 @@ def main():
 
     global_config = GlobalConfig.get()
     try:
-        if global_config.framework == TargetFramework.SERVICE_WEAVER_K8S:
-            bootServiceWeaverKube(gdb_manager)
-        elif global_config.framework == TargetFramework.NU:
-            bootFromNuConfig(gdb_manager)
-        else:
-            bootFromNuConfig(gdb_manager)
+        await boot(gdb_manager) 
     except KeyboardInterrupt:
         logger.info("Received interrupt signal. Exiting...")
 

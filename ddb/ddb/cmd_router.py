@@ -66,8 +66,8 @@ class CmdRouter:
         self.lock = Lock()
         self.sessions = {s.sid: s for s in sessions}
         self.state_mgr = StateManager.inst()
-        self.event_loop_thread=EventLoopThread()
-        Thread(target=self.event_loop_thread.run,args=()).start()
+        # self.event_loop_thread=EventLoopThread()
+        # Thread(target=self.event_loop_thread.run,args=()).start()
 
     def add_session(self, session: GdbSession):
         with self.lock:
