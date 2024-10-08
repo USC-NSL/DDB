@@ -15,6 +15,15 @@ from iddb.startup import cleanup_mosquitto_broker
 from iddb.utils import *
 from iddb.config import GlobalConfig
 
+
+
+try:
+    import debugpy
+    debugpy.listen(("localhost", 5678))
+    print("Waiting for debugger attach")
+    debugpy.wait_for_client()
+except Exception as e:
+    print(f"Failed to attach debugger: {e}")
 def exec_cmd(cmd: Union[List[str], str]):
     if isinstance(cmd, str):
         cmd = [cmd]
@@ -74,7 +83,7 @@ def run_cmd_loop():
 
 def ddb_exit():
     global gdb_manager, terminated
-    cleanup_mosquitto_broker()
+    # cleanup_mosquitto_broker()
     if not terminated:
         logger.info("Exiting ddb...")
         signal.signal(signal.SIGINT, signal.SIG_IGN)
