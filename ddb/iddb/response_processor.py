@@ -1,5 +1,6 @@
 from threading import Lock, Thread
 from queue import Queue
+import time
 from iddb.cmd_tracker import CmdTracker
 from iddb.utils import mi_print
 from iddb.state_manager import StateManager, ThreadStatus
@@ -79,6 +80,7 @@ class ResponseProcessor:
                 ResponseTransformer.output(
                     response, RunningAsyncRecordTransformer(all_running=False))
         elif resp_msg == "stopped":
+            self.state_manager.sessions[sid].pause_time=time.perf_counter()
             if "thread-id" in resp_payload:
                 thread_id = resp_payload["thread-id"]
                 if thread_id == "all":

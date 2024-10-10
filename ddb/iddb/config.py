@@ -50,8 +50,9 @@ class GlobalConfig:
         ssh_provided = ("SSH" in config_data)
         if ssh_provided:
             ssh_info = config_data["SSH"]
-            ddb_config.ssh.user = ssh_info.get("user", getpass.getuser())
-            ddb_config.ssh.port = ssh_info.get("port", 22)
+            ddb_config.ssh.user = ssh_info.get("user")
+            ddb_config.ssh.port = ssh_info.get("port")
+            ddb_config.ssh.private_key_path = ssh_info.get("private_key_path")
     
         gdbSessionConfigs: List[GdbSessionConfig] = []
         components = config_data["Components"] if "Components" in config_data else []

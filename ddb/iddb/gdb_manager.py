@@ -65,7 +65,8 @@ class GdbManager:
                 cred=SSHRemoteServerCred(
                     port=ddb_conf.ssh.port,
                     hostname=hostname,
-                    username=ddb_conf.ssh.user
+                    username=ddb_conf.ssh.user,
+                    private_key_path= ddb_conf.ssh.private_key_path
                 ),
                 verbose=True
             ),

@@ -191,13 +191,18 @@ class SSHAttachController(RemoteGdbController):
     def write_input(self, command: str):
         if self.verbose:
             logger.debug(f"Sending input to {str(self)}: {command}")
+        if command[-1] != "\n":
+            command += "\n"
         self.client.write(command)
+        
     
     def fetch_output(self, timeout=1) -> bytes:
         line = self.client.readline()
-        if self.verbose:
-            logger.debug(f"Fetching output from {str(self)}: {line}")
-        return line.encode()
+        if line:
+            if self.verbose:
+                logger.debug(f"Fetching output from {str(self)}: {line}")
+            return line
+        return b""
     
     def is_open(self) -> bool:
         return self.open 

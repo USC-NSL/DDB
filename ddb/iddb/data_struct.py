@@ -74,6 +74,7 @@ class BrokerInfo:
 class SSHInfo:
     port: int = 22
     user: str = getpass.getuser()
+    private_key_path: str = "~/.ssh/id_rsa"
 
 class TargetFramework(Enum):
     UNSPECIFIED = 1

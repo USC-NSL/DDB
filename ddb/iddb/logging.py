@@ -10,7 +10,7 @@ class CustomFilter(logging.Filter):
 
 # Create a logger for the current module
 logger = logging.getLogger("DDB")
-logger.setLevel(logging.DEBUG)  # Set the desired logging level
+logger.setLevel(logging.ERROR)  # Set the desired logging level
 
 # Create a console handler
 console_handler = logging.StreamHandler()

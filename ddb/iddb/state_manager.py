@@ -34,8 +34,6 @@ class SessionMeta:
         self.sid = sid
         self.current_tid: Optional[int] = None
         self.t_status: dict[int, ThreadStatus] = {}
-        self.current_context:ThreadContext=None
-        self.in_custom_context = False
         self.session_obj = session
         # maps session unique tid to per inferior tid
         # for example, if session 1 has:
@@ -54,6 +52,14 @@ class SessionMeta:
         # maps thread_group_id (str) to pid that thread group represents
         self.tg_to_pid: dict[str, int] = {}
         self.rlock = RLock()
+        
+        # for remotebacktrace
+        self.current_context: ThreadContext = None
+        self.in_custom_context = False
+        
+        # for timeout handling
+        self.pause_time = 0
+        self.time_offset = 0
     def create_thread(self, tid: int, tgid: str):
         with self.rlock:
             self.t_status[tid] = ThreadStatus.INIT

@@ -17,7 +17,7 @@ import debugpy
 # allow to manually reload while developing
 # goobjfile = gdb.current_objfile() or gdb.objfiles()[0]
 # goobjfile.pretty_printers = []
-print("Loading distributed backtrace support.",)
+# print("Loading distributed backtrace support.",)
 
 class DistributedBTCmd(gdb.Command):
     def __init__(self):
@@ -38,7 +38,7 @@ class DistributedBTCmd(gdb.Command):
                 filepath = stack['file'] if 'file' in stack else ""
                 print(f"{stack['level']} {stack['func']} file:{filepath}") 
         else:
-            print("no stack info presented")
+            # print("no stack info presented")
         # command = 'nc localhost 12345'
         # result = subprocess.run(command, input=input_data, shell=True, text=True, capture_output=True)
 
@@ -47,7 +47,7 @@ class DistributedBTCmd(gdb.Command):
 
         # # Print the output
         # print(output)
-        print("executed dbt")
+        # print("executed dbt")
 
 
 def get_local_variables(frame: gdb.Frame) -> List[gdb.Symbol]:
@@ -251,7 +251,7 @@ class SwitchContextMICmd(gdb.MICommand):
             cur_rbp = int(args[2]) if len(args) > 2 else None
             current_thread = gdb.selected_thread()
             thread_id = current_thread.num if current_thread else None
-            print(f"Switching to context: rip: {cur_rip:#x}, rsp: {cur_rsp:#x}, rbp: {cur_rbp:#x}, thread_id: {thread_id}")
+            # print(f"Switching to context: rip: {cur_rip:#x}, rsp: {cur_rsp:#x}, rbp: {cur_rbp:#x}, thread_id: {thread_id}")
             # Save current register values
             for reg in ['sp', 'pc', 'rbp']:
                 gdb.parse_and_eval(f'$save_{reg} = ${reg}')
@@ -440,9 +440,9 @@ class GetRemoteBTInfo(gdb.MICommand):
                             if ddb_meta:
                                 local_ip = int(ddb_meta["comm_ip"])
                             message = "success"
-                            print(f"found!!! ip: {remote_ip}, pid: {pid}, rip: {parent_rip}, rsp: {parent_rsp}, rbp: {parent_rbp}")
+                            # print(f"found!!! ip: {remote_ip}, pid: {pid}, rip: {parent_rip}, rsp: {parent_rsp}, rbp: {parent_rbp}")
                             break
-            print(f"ip: {remote_ip}, pid: {pid}, rip: {parent_rip}, rsp: {parent_rsp}, rbp: {parent_rbp}")
+            # print(f"ip: {remote_ip}, pid: {pid}, rip: {parent_rip}, rsp: {parent_rsp}, rbp: {parent_rbp}")
         except Exception as e:
             pass
         return {
@@ -461,7 +461,19 @@ class GetRemoteBTInfo(gdb.MICommand):
                 }
             }}
 
-
+class TimeOutHelper_linkLib(gdb.MICommand):
+    def __init__(self):
+        super().__init__("-timeout-helper-link-lib")
+    def invoke(self, args):
+        try:
+            libPath=args[0]
+            # call dlopen("/path/to/your/library.so", RTLD_NOW)
+            gdb.execute(f"call dlopen(\"{libPath}\", 2)")
+            # call __libc_dlopen_mode("/lib/x86_64-linux-gnu/libdl.so.2", 2)
+            gdb.execute(f"call __libc_dlopen_mode(\"{libPath}\", 2)")
+        except Exception as e:
+            return {"message": "error", "error": str(e)}
+        return {"message": "success"}
 
 
 MIEcho("-echo-dict", "dict")

@@ -21,3 +21,5 @@
 ServiceDiscovery:
   Broker:
     hostname: 127.0.0.1
+SSH:
+  private_key_path: ~/.ssh/id_ed25519_pssh

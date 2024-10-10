@@ -14,7 +14,6 @@ from iddb.utils import dev_print, parse_cmd
 from iddb.mtracer import GlobalTracer
 import sys
 from iddb.utils import ip_int2ip_str
-
 def prepare_ctx_switch_args(registers: Dict[str, int]) -> str:
     arg = ""
     for (reg, val) in registers.items():
@@ -91,7 +90,7 @@ class ContinueCmdHandler(CmdHandler):
 
         for session in session_metas:
             if session.in_custom_context:
-                self._switch_context(session)
+                await self._switch_context(session)
 
             
 
