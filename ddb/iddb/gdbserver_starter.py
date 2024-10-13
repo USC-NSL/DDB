@@ -54,6 +54,8 @@ class SSHRemoteServerClient(RemoteServerConnection):
         self.thread: Optional[threading.Thread] = None
         self.stdin_ready = threading.Event()
         self.stop_event = threading.Event()
+        self.mtx = threading.Lock()
+        self.channel = None
 
     # def start_thread(self, command: str):
     #     """
@@ -86,34 +88,40 @@ class SSHRemoteServerClient(RemoteServerConnection):
     #         logger.exception(f"Exception in start_thread: {e}")
     #         self.stdin_ready.set()  # Ensure the main thread isn't stuck waiting
     #         self.message_queue.put(f"Error: {e}")
-    _lock=gevent.lock.RLock()
+    # _lock=gevent.lock.RLock()
+    # _lock = threading.RLock()
     def start_thread(self, command: str):
         """
         Thread target to run the remote command and enqueue the output.
 
         :param command: The command to execute on the remote host.
         """
+        # faulthandler.enable(sys.stderr)
         try:
-            logger.debug(f"Starting remote command: {command}")
+            # logger.debug(f"Starting remote command: {command}")
             # TODO: Setup remote environment first, such as copying extension scripts
-            channel = self.client.execute(command)
-            self.stdin = Stdin(channel, self.client)
+            self.channel = self.client.execute(command)
+            # self.stdin = Stdin(channel, self.client)
             self.stdin_ready.set()
 
-            logger.debug("Started reading stdout")
-            logger.exception("Started reading stdout")
+            # logger.debug("Started reading stdout")
+            # logger.exception("Started reading stdout")
             while not self.stop_event.is_set():
                 try:
-                    with self._lock:
-                        numbytes,buffer= channel.read()
-                    if numbytes == LIBSSH2_ERROR_EAGAIN:
-                        self.client.poll()
-                        continue
-                    if numbytes < 0:
-                        break
-                    gevent.sleep()
-                    self.message_queue.put(buffer)
-                    logger.debug(f"Enqueued line: {buffer.decode()}")
+                    with self.mtx:
+                        numbytes, buffer= self.channel.read()
+                        if numbytes == LIBSSH2_ERROR_EAGAIN:
+                            self.client.poll()
+                            continue
+
+                        if numbytes > 0:
+                            self.message_queue.put(bytes(buffer[:numbytes]))
+                        elif numbytes == 0:
+                            continue
+                        else:
+                            break
+                        # gevent.sleep()
+                        # logger.debug(f"Enqueued line: {bytes(buffer[:numbytes]).decode()}")
                 except Exception as e:
                     logger.error(f"Exception in reading output: {e}")
 
@@ -160,7 +168,17 @@ class SSHRemoteServerClient(RemoteServerConnection):
             return None
         
     def write(self, command: str):
-        self.stdin.write(command)
+        with self.mtx:
+            if self.channel:
+                try:
+                    self.channel.write(command)
+                except Exception as e:
+                    logger.error(f"Error writing to channel: {e}")
+            else:
+                logger.error("Channel not initialized")
+                
+        # with self._lock:
+        # self.stdin.write(command)
         
     def close(self):
         self.client.disconnect()

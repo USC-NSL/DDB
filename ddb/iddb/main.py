@@ -15,8 +15,6 @@ from iddb.startup import cleanup_mosquitto_broker
 from iddb.utils import *
 from iddb.config import GlobalConfig
 
-
-
 # try:
 #     import debugpy
 #     debugpy.listen(("localhost", 5678))
@@ -24,6 +22,7 @@ from iddb.config import GlobalConfig
 #     debugpy.wait_for_client()
 # except Exception as e:
 #     print(f"Failed to attach debugger: {e}")
+
 def exec_cmd(cmd: Union[List[str], str]):
     if isinstance(cmd, str):
         cmd = [cmd]
