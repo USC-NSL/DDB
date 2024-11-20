@@ -1,0 +1,50 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/g++",
+      "-Wall",
+      "-O1",
+      "-g",
+      "-Iinc",
+      "-c",
+      "-o",
+      "build/faketime_pause.o",
+      "src/faketime_pause.cpp"
+    ],
+    "directory": "/home/ybyan/proj/distributed-debugger/exp",
+    "file": "/home/ybyan/proj/distributed-debugger/exp/src/faketime_pause.cpp",
+    "output": "/home/ybyan/proj/distributed-debugger/exp/build/faketime_pause.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/g++",
+      "-Wall",
+      "-O1",
+      "-g",
+      "-Iinc",
+      "-c",
+      "-o",
+      "build/real_timer.o",
+      "src/real_timer.cpp"
+    ],
+    "directory": "/home/ybyan/proj/distributed-debugger/exp",
+    "file": "/home/ybyan/proj/distributed-debugger/exp/src/real_timer.cpp",
+    "output": "/home/ybyan/proj/distributed-debugger/exp/build/real_timer.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/g++",
+      "-Wall",
+      "-O1",
+      "-g",
+      "-Iinc",
+      "-c",
+      "-o",
+      "build/cycle_counter.o",
+      "src/cycle_counter.cpp"
+    ],
+    "directory": "/home/ybyan/proj/distributed-debugger/exp",
+    "file": "/home/ybyan/proj/distributed-debugger/exp/src/cycle_counter.cpp",
+    "output": "/home/ybyan/proj/distributed-debugger/exp/build/cycle_counter.o"
+  }
+]
