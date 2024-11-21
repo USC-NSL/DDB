@@ -442,6 +442,7 @@ dependencies = [
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "pandas" },
+    { name = "scienceplots" },
 ]
 
 [package.metadata]
@@ -451,6 +452,7 @@ requires-dist = [
     { name = "matplotlib", specifier = ">=3.9.2" },
     { name = "numpy", specifier = ">=2.1.3" },
     { name = "pandas", specifier = ">=2.2.3" },
+    { name = "scienceplots", specifier = ">=2.1.1" },
 ]
 
 [[package]]
@@ -1824,6 +1826,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/c0/b8/03d4561095d4fbf2ab62ed651a2b5cb674fe5245b1ab2f7909e8056bd014/rpds_py-0.21.0-pp310-pypy310_pp73-musllinux_1_2_i686.whl", hash = "sha256:3b766a9f57663396e4f34f5140b3595b233a7b146e94777b97a8413a1da1be18", size = 550599 },
     { url = "https://files.pythonhosted.org/packages/f4/54/d93867e2bf4acf57314798181faf3bd7d1a4f51a3aa81cb6211d56f74d3f/rpds_py-0.21.0-pp310-pypy310_pp73-musllinux_1_2_x86_64.whl", hash = "sha256:af4a644bf890f56e41e74be7d34e9511e4954894d544ec6b8efe1e21a1a8da6c", size = 528963 },
     { url = "https://files.pythonhosted.org/packages/66/86/6f72984a284d720d84fba5ee7b0d1b0d320978b516497cbfd6e335e95a3e/rpds_py-0.21.0-pp310-pypy310_pp73-win_amd64.whl", hash = "sha256:3e30a69a706e8ea20444b98a49f386c17b26f860aa9245329bab0851ed100677", size = 219621 },
+]
+
+[[package]]
+name = "scienceplots"
+version = "2.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "matplotlib" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5e/04/aff33daa212cf6dd5427999062aab0289976dd1b0b842752e81ab17aef66/SciencePlots-2.1.1.tar.gz", hash = "sha256:d8d197e3410f87ebdad0b9c265eaab596094fb082d97123e835f6bc32800ab54", size = 10757 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/51/2a/debffdd7061c7a65ab46c51e671b895dc8231c4a14950849c40699eb2070/SciencePlots-2.1.1-py3-none-any.whl", hash = "sha256:2e64d2e93b4f98702f30145dbb70d238f5dc315e227fec331489631232dfc9e0", size = 16472 },
 ]
 
 [[package]]

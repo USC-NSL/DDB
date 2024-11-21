@@ -107,7 +107,7 @@ void do_work(RingBuffer<T, Capacity> &rb) {
     }
 
     counter++;
-    if (counter == 400000) {
+    if (counter == 100000) {
         break;
     }
   }
