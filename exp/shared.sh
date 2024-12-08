@@ -2,6 +2,16 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
+CLUSTER_IP_LOWER=1  # inclusive lower bound for ips
+CLUSTER_IP_UPPER=12 # inclusive upper bound for ips
+CLUSTER_IP_PREFIX="10.10.2."
+
+DDB_DIR="$SCRIPT_DIR/../ddb"
+DDB_CONF="$DDB_DIR/configs"
+SERVICE_DISCOVERY_CONFIG_DIR="/tmp/ddb/service_discovery/"
+
+PROJ_SCRIPT_DIR="$SCRIPT_DIR/../scripts"
+
 FW_DIR="$SCRIPT_DIR/../rpc_frameworks"
 LOG_DIR="$SCRIPT_DIR/logs"
 
@@ -43,3 +53,39 @@ link_all_files() {
 
   echo "All files from $source_dir have been linked to $target_dir."
 }
+
+function svr_ip() {
+  echo $CLUSTER_IP_PREFIX$1
+}
+
+function bcast_cmds() {
+  local CMD=$1
+  for svr_idx in $(seq $CLUSTER_IP_LOWER $CLUSTER_IP_UPPER); do
+    ssh $(svr_ip $svr_idx) "$CMD" &
+  done
+  wait
+}
+
+function batch_transfer() {
+  local SRC=$1
+  local EST=$2
+  for svr_idx in $(seq $CLUSTER_IP_LOWER $CLUSTER_IP_UPPER); do
+    scp -r $SRC $(svr_ip $svr_idx):$EST
+  done
+}
+
+function prep_gdb() {
+  bcast_cmds "$PROJ_SCRIPT_DIR/setup_gdb.sh"
+}
+
+function prep_mosquitto() {
+  bcast_cmds "$PROJ_SCRIPT_DIR/prepare.sh"
+}
+
+function prep_folder() {
+  bcast_cmds "mkdir -p $SERVICE_DISCOVERY_CONFIG_DIR"
+}
+
+prep_folder
+prep_gdb
+# prep_mosquitto
