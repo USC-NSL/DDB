@@ -1,8 +1,8 @@
-CPU 25| <5> cpu: detected 32 cores, 1 nodes
-CPU 25| <5> time: detected 2994 ticks / us
-[  0.000433] CPU 25| <5> loading configuration from '/users/ybyan/ddb/rpc_frameworks/Nu/exp/social_net/nu_multi/conf/client3'
-[  0.001180] CPU 25| <3> < 1 guaranteed kthreads is not recommended for networked apps
+CPU 24| <5> cpu: detected 32 cores, 1 nodes
+CPU 24| <5> time: detected 2994 ticks / us
+[  0.000459] CPU 24| <5> loading configuration from '/users/ybyan/ddb/rpc_frameworks/Nu/exp/social_net/nu_multi/conf/client3'
+[  0.001331] CPU 24| <3> < 1 guaranteed kthreads is not recommended for networked apps
 start do_work
 before multiclients
 real_mops, avg_lat, 50th_lat, 90th_lat, 95th_lat, 99th_lat, 99.9th_lat
-0.229697 770 107 474 920 19037 20542
+0.228537 775 107 475 929 19160 20537
