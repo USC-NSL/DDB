@@ -9,7 +9,6 @@ PrerunGdbCommands:
 - name: "disable CALADAN's custom signal handling"
   command: "handle SIGUSR1 SIGUSR2 nostop noprint"
 
-
 PostrunGdbCommands:
 - name: "auto continue attached process"
   command: "-exec-continue"

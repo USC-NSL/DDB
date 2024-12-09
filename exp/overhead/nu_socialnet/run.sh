@@ -35,47 +35,56 @@ function configure_ddb() {
   fi
 }
 
+function prep_ddb_run() {
+  # Get service discovery configuration to all servers
+  # ideally, we expect /tmp/ddb is mounted as nfs, so we don't need to explicitly transfer the config
+  EMPTY_PIPE=$CURR_DIR/empty_pipe
+  pushd $DDB_DIR
+  rm -f $EMPTY_PIPE
+  mkfifo $EMPTY_PIPE
+  uv sync
+  cat $EMPTY_PIPE | uv run -- ddb $DDB_CONF/dbg_nu_c6525_exp.yaml >/dev/null 2>&1 &
+  DDB_JOB=$!
+  echo "Waiting DDB to be ready..."
+  sleep 8
+  popd
+  batch_transfer $SERVICE_DISCOVERY_CONFIG_DIR/* $SERVICE_DISCOVERY_CONFIG_DIR
+  # quick cleanup
+  pkill -9 ddb
+  pkill -9 mosquitto
+  kill -9 $DDB_JOB
+  pkill -9 cat
+  rm -f $EMPTY_PIPE
+}
+
 SOCIALNET_DIR="$NU_DIR/app/socialNetwork/single_proclet"
 
 pushd $NU_DIR
 
 # Run test with DDB embedding disabled
-echo "Running NO DDB EMBEDDING + no debugger attached"
-configure_ddb 0
-build_and_run "DDB_DISABLE" 0
+# echo "Running NO DDB EMBEDDING + no debugger attached"
+# configure_ddb 0
+# build_and_run "DDB_DISABLE" 0 0
 
 # Run test with DDB embedding disabled + gdb attached
 echo "Running NO DDB EMBEDDING + gdb attached"
 configure_ddb 0
-build_and_run "DDB_DISABLE" 1
+build_and_run "DDB_DISABLE" 1 0
 
 # Run test with DDB embedding enabled
-echo "Running DDB EMBEDDING + no debugger attached"
-configure_ddb 1
-build_and_run "DDB_ENABLE" 0
+# echo "Running DDB EMBEDDING + no debugger attached"
+# configure_ddb 1
+# build_and_run "DDB_ENABLE" 0 0
 
 # Run test with DDB embedding + ddb attached
 echo "Running DDB EMBEDDING + ddb attached"
 configure_ddb 1
-# Get service discovery configuration to all servers
-# ideally, we expect /tmp/ddb is mounted as nfs, so we don't need to explicitly transfer the config
-EMPTY_PIPE=$CURR_DIR/empty_pipe
-pushd $DDB_DIR
-rm -f $EMPTY_PIPE
-mkfifo $EMPTY_PIPE
-uv sync
-cat $EMPTY_PIPE | uv run -- ddb $DDB_CONF/dbg_nu_c6525_exp.yaml >/dev/null 2>&1 &
-DDB_JOB=$!
-echo "Waiting DDB to be ready..."
-sleep 8
-popd
-batch_transfer $SERVICE_DISCOVERY_CONFIG_DIR/* $SERVICE_DISCOVERY_CONFIG_DIR
-# quick cleanup
-pkill -9 ddb
-pkill -9 mosquitto
-kill -9 $DDB_JOB
-pkill -9 cat
-rm -f $EMPTY_PIPE
-build_and_run "DDB_ENABLE" 2
+prep_ddb_run
+build_and_run "DDB_ENABLE" 2 0
+
+# Run test with DDB embedding disabled + gdb attached + bkpts insertion
+# echo "Running NO DDB EMBEDDING + gdb attached"
+# configure_ddb 0
+# build_and_run "DDB_DISABLE" 1 1
 
 popd
