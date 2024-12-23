@@ -42,7 +42,7 @@ class GdbManager:
         ddbapiserver = FlaskApp(router=self.router)
         
         # Convert Flask app to run in background
-        await asyncio.to_thread(lambda: Thread(target=ddbapiserver.app.run).start())
+        await asyncio.to_thread(ddbapiserver.app.run)
         
         self.processor = CommandProcessor(self.router, GlobalConfig.get().adapter)
         self.state_mgr = StateManager.inst()

@@ -1,11 +1,15 @@
 import asyncio
+from dataclasses import dataclass
+import multiprocessing
 import threading
 import os
 import time
 from uuid import uuid4
-from typing import List, Optional
+from typing import Dict, List, Optional
 from threading import Thread, Lock
 from time import sleep
+
+import cloudpickle
 
 from iddb.event_loop import AsyncSSHLoop, GlobalRunningLoop
 import pkg_resources
@@ -45,13 +49,64 @@ class SessionCounter:
     def get() -> int:
         return SessionCounter.inst().inc()
 
+# class SessionCreationTaskQueue:
+#     ''' Singleton class for managing session creation tasks
+#     Debugger session creation is a relative heavy task, so we need to manage it in a queue.
+#     Each creation may takes a few hundred milliseconds, we should avoid overload the asyncio loop.
+#     '''
+#     _instance = None
+#     _lock = Lock()
+
+#     def __new__(cls):
+#         with cls._lock:
+#             if cls._instance is None:
+#                 cls._instance = super(SessionCreationTaskQueue, cls).__new__(cls)
+#                 cls._instance._initialized = False
+#             return cls._instance
+
+#     def __init__(self, max_workers=5):
+#         if not self._initialized:
+#             self.queue = asyncio.Queue()
+#             self.max_workers = max_workers
+#             self._initialized = True
+
+#     @staticmethod
+#     def inst():
+#         return SessionCreationTaskQueue()
+
+#     async def worker(self):
+#         while True:
+#             args, callback = await self.queue.get()
+#             try:
+#                 if args:
+#                     await callback(args)
+#                 else:
+#                     await callback()
+#             except Exception as e:
+#                 logger.error(f"Error in worker: {e}")
+#             finally:
+#                 self.queue.task_done()
+
+#     async def add_task(self, config, callback):
+#         asyncio.run_coroutine_threadsafe(self.queue.put((config, callback)), AsyncSSHLoop().get_loop())
+
+#     def start_workers(self):
+#         for _ in range(self.max_workers):
+#             asyncio.run_coroutine_threadsafe(self.worker(), AsyncSSHLoop().get_loop())
+
+
 class SessionCreationTaskQueue:
-    ''' Singleton class for managing session creation tasks
-    Debugger session creation is a relative heavy task, so we need to manage it in a queue.
-    Each creation may takes a few hundred milliseconds, we should avoid overload the asyncio loop.
-    '''
+    '''Singleton class for managing session creation tasks with multi-process support.'''
+
     _instance = None
     _lock = Lock()
+
+    _output_collector: multiprocessing.Queue = multiprocessing.Queue()
+
+    @dataclass
+    class WorkerMeta:
+        task_queue: asyncio.Queue
+        event_loop: Optional[asyncio.AbstractEventLoop] = None
 
     def __new__(cls):
         with cls._lock:
@@ -60,35 +115,125 @@ class SessionCreationTaskQueue:
                 cls._instance._initialized = False
             return cls._instance
 
-    def __init__(self, max_workers=5):
+    def __init__(self, max_proc_wrks=5, max_async_wrks=5):
         if not self._initialized:
-            self.queue = asyncio.Queue()
-            self.max_workers = max_workers
+            self.task_queue = multiprocessing.Queue()
+            # self.task_queue = CallableQueue()
+            self.max_proc_wrks = max_proc_wrks
+            self.max_async_wrks = max_async_wrks
+            self.wrk_procs: List[multiprocessing.Process] = []
+            # self.async_wrk_queues: Dict[int, asyncio.Queue] = {}
+            self.wrk_meta: Dict[int, SessionCreationTaskQueue.WorkerMeta] = {}
             self._initialized = True
 
     @staticmethod
     def inst():
         return SessionCreationTaskQueue()
 
-    async def worker(self):
-        while True:
-            args, callback = await self.queue.get()
-            try:
-                if args:
-                    await callback(args)
-                else:
-                    await callback()
-            except Exception as e:
-                logger.error(f"Error in worker: {e}")
-            finally:
-                self.queue.task_done()
+    def proc_worker(self, index: int):
+        """Worker function to process tasks in a separate process."""
+        try:
+            wrk_meta = self.wrk_meta[index]
 
-    async def add_task(self, config, callback):
-        asyncio.run_coroutine_threadsafe(self.queue.put((config, callback)), AsyncSSHLoop().get_loop())
+            async def process_tasks(meta: SessionCreationTaskQueue.WorkerMeta):
+                logger.info(f"Started async worker")
+                while True:
+                    try:
+                        logger.debug("Processing task")
+                        callable = await meta.task_queue.get()
+                        # logger.debug(f"get callable: {callable}")
+                        callback, args, kwargs = cloudpickle.loads(callable)
+                        logger.debug(f"Processed task: {args}")
+                        await callback(*args, **kwargs)
+                        logger.debug(f"Task completed: {args}")
+                    except Exception as e:
+                        logger.error(f"Error in async worker: {e}")
+                    finally:
+                        meta.task_queue.task_done()
+
+            async def spawn_async_wrk(meta: SessionCreationTaskQueue.WorkerMeta, wrker_num: int):
+                meta.event_loop = asyncio.get_event_loop()
+                for _ in range(wrker_num):
+                    asyncio.create_task(process_tasks(meta))
+
+            def dispatcher(task_queue: multiprocessing.Queue, meta: SessionCreationTaskQueue.WorkerMeta):
+                while True:
+                    if meta.event_loop == None or not meta.event_loop.is_running():
+                        logger.info(f"Event loop is not running.")
+                        time.sleep(1)
+                    try:
+                        callable = task_queue.get()
+                        logger.info(f"dispatch")
+                        asyncio.run_coroutine_threadsafe(
+                            meta.task_queue.put(callable), 
+                            meta.event_loop 
+                        )
+                    except Exception as e:
+                        logger.error(f"Error in dispatcher: {e}")
+        
+            async def start_dispatcher(
+                task_queue: multiprocessing.Queue, 
+                meta: SessionCreationTaskQueue.WorkerMeta, 
+                wrker_num: int = 5
+            ):
+                await spawn_async_wrk(meta, wrker_num)
+                await asyncio.to_thread(
+                    lambda: Thread(target=dispatcher, args=(task_queue, meta), daemon=True).start()
+                )
+                await asyncio.Event().wait()
+
+            asyncio.run(
+                start_dispatcher(self.task_queue, wrk_meta, self.max_async_wrks), 
+                debug=True,
+            )
+
+        except Exception as e:
+            logger.error(f"Error in worker proc: {e}")
+
+    def add_task(self, callback, args=(), kwargs={}):
+        """Add a task to the queue."""
+        callable = cloudpickle.dumps((callback, args, kwargs))
+        self.task_queue.put(callable)
 
     def start_workers(self):
-        for _ in range(self.max_workers):
-            asyncio.run_coroutine_threadsafe(self.worker(), AsyncSSHLoop().get_loop())
+        """Start multiple worker processes."""
+        for i in range(self.max_proc_wrks):
+            self.wrk_meta[i] = SessionCreationTaskQueue.WorkerMeta(asyncio.Queue())
+            process = multiprocessing.Process(target=self.proc_worker, args=(i,))
+            process.start()
+            self.wrk_procs.append(process)
+        logger.info(f"Started {self.max_proc_wrks} worker processes.")
+
+    async def collect_output(self):
+        """Collect output from all workers."""
+        def collect():  
+            while True:
+                try:
+                    output = SessionCreationTaskQueue.inst()._output_collector.get()
+                    logger.info(f"Output from worker: {output}")
+                    ResponseProcessor.inst().put(output)
+                except Exception as e:
+                    logger.error(f"Error in collecting output: {e}")
+        await asyncio.to_thread(collect) 
+
+    def stop_workers(self):
+        """Stop all worker processes."""
+        def clean_event_loop(i):
+            el = self.wrk_meta[i].event_loop
+            if el and el.is_running():
+                for task in asyncio.all_tasks(el):
+                    el.call_soon_threadsafe(task.cancel)
+                el.call_soon_threadsafe(el.stop)
+
+        for i, process in enumerate(self.wrk_procs):
+            clean_event_loop(i)
+            process.terminate()
+            process.join()
+        logger.info("All worker processes have been terminated.")
+
+    def add_output(self, output):
+        """Add output to the output collector."""
+        self._output_collector.put(output)
 
 class GdbSession:
     def __init__(self, config: GdbSessionConfig, mi_version: str = None) -> None:
@@ -318,7 +463,7 @@ class GdbSession:
         self.mi_output_task = asyncio.create_task(self.fetch_mi_output_async())
         
     async def start_async(self) -> None:
-        await SessionCreationTaskQueue.inst().add_task(None, self.__start_async)
+        await SessionCreationTaskQueue.inst().add_task(self.__start_async)
 
     async def fetch_mi_output_async(self):
         # currently this runs in the main loop
@@ -334,10 +479,13 @@ class GdbSession:
                         if r["type"] == "console":
                             payload += r["payload"]
                         else:
-                            asyncio.run_coroutine_threadsafe(
-                                self.processor.put(
-                                    SessionResponse(self.sid, self.get_meta_str(), r)
-                                ), GlobalRunningLoop().get_loop()
+                            # asyncio.run_coroutine_threadsafe(
+                            #     self.processor.put(
+                            #         SessionResponse(self.sid, self.get_meta_str(), r)
+                            #     ), GlobalRunningLoop().get_loop()
+                            # )
+                            SessionCreationTaskQueue.inst().add_output(
+                                SessionResponse(self.sid, self.get_meta_str(), r)
                             )
                             # await self.processor.put(
                             #     SessionResponse(self.sid, self.get_meta_str(), r)
@@ -352,11 +500,15 @@ class GdbSession:
                     payload = payload.strip()
                     if payload:
                         console_out["payload"] = payload
-                        asyncio.run_coroutine_threadsafe(
-                            self.processor.put(
-                                SessionResponse(
-                                    self.sid, self.get_meta_str(), console_out)
-                            ), GlobalRunningLoop().get_loop()
+                        # asyncio.run_coroutine_threadsafe(
+                        #     self.processor.put(
+                        #         SessionResponse(
+                        #             self.sid, self.get_meta_str(), console_out)
+                        #     ), GlobalRunningLoop().get_loop()
+                        # )
+                        SessionCreationTaskQueue.inst().add_output(
+                            SessionResponse(
+                                self.sid, self.get_meta_str(), console_out)
                         )
                         # await self.processor.put(
                         #     SessionResponse(

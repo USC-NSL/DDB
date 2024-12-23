@@ -1,4 +1,6 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
+import multiprocessing
 import subprocess
 from time import sleep
 import time
@@ -7,6 +9,7 @@ from kubernetes import config as kubeconfig, client as kubeclient
 from kubernetes.stream import stream
 from kubernetes.client.rest import ApiException
 import uuid
+from iddb.gdb_session import SessionCreationTaskQueue
 from iddb.gdbserver_starter import SSHRemoteServerClient, SSHRemoteServerCred
 from iddb.logging import logger
 import asyncio, asyncssh, sys
@@ -171,6 +174,15 @@ class ServiceWeaverkubeGdbController(RemoteGdbController):
         self.resp.close()
 
 class SSHAttachController(RemoteGdbController):
+    class MsgType:
+        COMMAND = 1
+        DATA = 2
+
+    @dataclass
+    class CommMsg:
+        msg_type: "SSHAttachController".MsgType
+        payload: bytes
+        
     def __init__(self, pid: int, cred: SSHRemoteServerCred, verbose: bool = False):
         self.pid = pid
         self.verbose = verbose
@@ -178,12 +190,40 @@ class SSHAttachController(RemoteGdbController):
         self.cred = cred
         self.open = False
 
-    async def start(self, command: str):
+        self.input_queue = multiprocessing.Queue()
+        self.output_queue: multiprocessing.Queue[SSHAttachController.CommMsg]  = multiprocessing.Queue()
+
+    async def __start(self, command: str, iq: multiprocessing.Queue, oq: multiprocessing.Queue):
         if self.verbose:
             logger.debug(f"Starting {str(self)}")
         await self.client.start(command) 
+        oq.put(SSHAttachController.CommMsg(SSHAttachController.MsgType.COMMAND, b"Started"))
+
+        async def write():
+            while True:
+                try:
+                    msg = iq.get(timeout=1)
+                    if msg is None:
+                        break
+                    if msg.msg_type == SSHAttachController.MsgType.COMMAND:
+                        self.client.write(msg.payload.decode())
+                    iq.task_done()
+                except Exception as e:
+                    logger.error(f"Error in write: {e}")
+                    break
+        # logger.debug(f"SSH connection established: {str(self)}")
+
+    async def start(self, command: str):
+        if self.verbose:
+            logger.debug(f"Starting {str(self)}")
+        SessionCreationTaskQueue.inst().add_task(self.__start, command)
         self.open = True
         logger.debug(f"SSH connection established: {str(self)}")
+        # if self.verbose:
+        #     logger.debug(f"Starting {str(self)}")
+        # await self.client.start(command) 
+        # self.open = True
+        # logger.debug(f"SSH connection established: {str(self)}")
     
     def write_input(self, command: str):
         if self.verbose:

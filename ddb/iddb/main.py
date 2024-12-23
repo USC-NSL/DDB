@@ -93,6 +93,7 @@ async def ddb_exit():
             
             GlobalRunningLoop().stop()
             AsyncSSHLoop().stop()
+            SessionCreationTaskQueue.inst().stop_workers()
 
             try:
                 sys.exit(0)
@@ -176,6 +177,7 @@ def main():
         loop.add_signal_handler(signal.SIGTERM, proper_cleanup, "SIGTERM")
 
         GlobalHandler.DDB_EXIT_HANDLE = lambda: proper_cleanup()
+        asyncio.create_task(SessionCreationTaskQueue.inst().collect_output())
 
         globals.DBG_MANAGER = GdbManager()
 

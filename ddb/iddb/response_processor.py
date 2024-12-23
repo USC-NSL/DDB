@@ -27,7 +27,10 @@ class ResponseProcessor:
         return ResponseProcessor._instance
 
     async def put(self, response: SessionResponse):
-        await self.queue.put(response)
+        asyncio.run_coroutine_threadsafe(
+            self.queue.put(response), GlobalRunningLoop().get_loop()
+        ) 
+        # await self.queue.put(response)
 
     async def process(self):
         while True:

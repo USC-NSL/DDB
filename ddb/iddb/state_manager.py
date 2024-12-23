@@ -54,6 +54,7 @@ class SessionMeta:
         # maps thread_group_id (str) to pid that thread group represents
         self.tg_to_pid: dict[str, int] = {}
         self.rlock = RLock()
+
     def create_thread(self, tid: int, tgid: str):
         with self.rlock:
             self.t_status[tid] = ThreadStatus.INIT
