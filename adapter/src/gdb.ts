@@ -12,7 +12,7 @@ const accessAsync = promisify(fs.access);
 export interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArguments {
 	cwd: string;
 	target: string;
-	gdbpath: string;
+	ddbpath: string;
 	env: any;
 	debugger_args: string[];
 	pathSubstitutions: { [index: string]: string };
@@ -46,40 +46,9 @@ export interface AttachRequestArguments extends DebugProtocol.AttachRequestArgum
 	showDevDebugOutput: boolean;
 }
 
-async function checkPythonExists(pythonPath: string): Promise<void> {
+async function checkDDBExists(ddbpath: string): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-        const pythonProcess = spawn(pythonPath, ['--version']);
-
-        // Capture stdout and stderr
-        let stdout = '';
-        let stderr = '';
-
-        pythonProcess.stdout.on('data', (data) => {
-            stdout += data.toString();
-        });
-
-        pythonProcess.stderr.on('data', (data) => {
-            stderr += data.toString();
-        });
-
-        pythonProcess.on('error', (err) => {
-            reject(new Error(`Python not found at path: ${pythonPath}`));
-        });
-
-        pythonProcess.on('close', (code) => {
-            if (code === 0) {
-                // Optionally, verify the Python version using stdout or stderr
-                resolve();
-            } else {
-                reject(new Error(`Python check failed with code ${code}: ${stderr || stdout}`));
-            }
-        });
-    });
-}
-
-async function checkDDBExists(): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-        const ddbProc = spawn("ddb", ['--version']);
+        const ddbProc = spawn(ddbpath, ['--version']);
 
         // Capture stdout and stderr
         let stdout = '';
@@ -129,14 +98,12 @@ class GDBDebugSession extends MI2DebugSession {
             // 1. Check if the configuration file exists and is readable
             await fs.promises.access(args.configFilePath, fs.constants.R_OK);
             
-            // 2. Check if Python exists
-            // const pythonPath = args.pythonPath || 'python';
-            // await checkPythonExists(pythonPath);
-			await checkDDBExists();
+            // 2. Check if DDB exists
+			await checkDDBExists(args.ddbpath);
 
             // 3. Initialize the MI Debugger
             this.miDebugger = new MI2(
-                'ddb',
+                args.ddbpath,
                 [args.configFilePath],
                 args.debugger_args,
                 args.env

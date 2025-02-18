@@ -173,10 +173,15 @@
 								"type": "string",
 								"description": "project path"
 							},
-							"gdbpath": {
+							"ddbpath": {
 								"type": "string",
-								"description": "Path to the gdb executable or the command if in PATH",
-								"default": "gdb"
+								"description": "Path to the ddb executable or the command if in PATH",
+								"default": "ddb"
+							},
+							"configFilePath": {
+								"type": "string",
+								"description": "Path to the ddb configuration file",
+								"default": null
 							},
 							"env": {
 								"type": "object",

@@ -329,9 +329,9 @@ export class MI2 extends EventEmitter implements IBackend {
 			// 	// if (!gdbMatch.exec(line))
 			// 	// 	this.log("stdout", line);
 			// } else {
-			if (line == "[ TOOL MI OUTPUT ] ") {
-				miOutputStarted = true;
-			} else if (miOutputStarted) {
+			// if (line.trim() == "(ddb)") {
+			// 	miOutputStarted = true;
+			// } else if (miOutputStarted) {
 				console.log("parsing line:", ` ${line}`);
 				const parsed = parseMI(line);
 				if (this.debugOutput)
@@ -347,7 +347,7 @@ export class MI2 extends EventEmitter implements IBackend {
 				if (!handled && parsed.resultRecords && parsed.resultRecords.resultClass == "error") {
 					this.log("stderr", parsed.result("msg") || line);
 				}
-				if (parsed.outOfBandRecord) {
+				if (parsed.outOfBandRecord.length > 0) {
 					parsed.outOfBandRecord.forEach(record => {
 						if (record.isStream) {
 							this.log(record.type, record.content);
@@ -441,7 +441,7 @@ export class MI2 extends EventEmitter implements IBackend {
 				if (!handled)
 					this.log("log", "Unhandled: " + JSON.stringify(parsed));
 				miOutputStarted = false
-			}
+			// }
 		});
 	}
 
