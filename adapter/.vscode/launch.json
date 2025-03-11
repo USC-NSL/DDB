@@ -1,0 +1,58 @@
+// A launch configuration that compiles the extension and then opens it inside a new window
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Launch Extension",
+			"type": "extensionHost",
+			"request": "launch",
+			// "runtimeExecutable": "${execPath}",
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder}",
+				"${workspaceFolder}/../apps"
+			],
+			"sourceMaps": true,
+			"outFiles": [
+				"${workspaceRoot}/out/**/*.js"
+			],
+		},
+		{
+			"name": "code-debug server",
+			"type": "node",
+			"request": "launch",
+			"runtimeArgs": [ "--nolazy" ],
+			"program": "${workspaceRoot}/src/gdb.ts",
+			"stopOnEntry": false,
+			"args": [ "--server=4711" ],
+			"sourceMaps": true,
+			"outFiles": [
+				"${workspaceRoot}/out/**/*.js"
+			],
+			"cwd": "${workspaceRoot}",
+			"preLaunchTask": "compile",
+			"runtimeExecutable": "${env:HOME}/.nvm/versions/node/v22.12.0/bin/node"
+		},
+		{
+			"name": "Launch Tests",
+			"type": "extensionHost",
+			"request": "launch",
+			"runtimeExecutable": "${execPath}",
+			"args": [
+				"--extensionDevelopmentPath=${workspaceRoot}",
+				"--extensionTestsPath=${workspaceRoot}/out/src/test/suite/index"
+			],
+			"stopOnEntry": false,
+			"sourceMaps": true,
+			"outFiles": [
+				"${workspaceRoot}/out/**/*.js"
+			],
+			"preLaunchTask": "compile"
+		}
+	],
+	"compounds": [
+		{
+			"name": "Extension Debugging (Extension + Debug Server)",
+			"configurations": ["Launch Extension", "code-debug server"]
+		},
+	]
+}
