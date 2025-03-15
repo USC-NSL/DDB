@@ -114,7 +114,7 @@ class GDBDebugSession extends MI2DebugSession {
             this.initDebugger();
             this.quit = false;
             this.attached = false;
-            this.initialRunCommand = RunCommand.CONTINUE;
+            this.initialRunCommand = RunCommand.NONE;
             this.isSSH = false;
             this.started = false;
             this.crashed = false;
