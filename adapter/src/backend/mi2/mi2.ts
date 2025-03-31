@@ -524,31 +524,31 @@ export class MI2 extends EventEmitter implements IBackend {
 		});
 	}
 
-	next(reverse: boolean = false): Thenable<boolean> {
+	next(thread: number, reverse: boolean = false): Thenable<boolean> {
 		if (trace)
 			this.log("stderr", "next");
 		return new Promise((resolve, reject) => {
-			this.sendCommand("exec-next" + (reverse ? " --reverse" : "")).then((info) => {
+			this.sendCommand("exec-next" + ` --thread ${thread}` + (reverse ? " --reverse" : "")).then((info) => {
 				resolve(info.resultRecords.resultClass == "running");
 			}, reject);
 		});
 	}
 
-	step(reverse: boolean = false): Thenable<boolean> {
+	step(thread: number, reverse: boolean = false): Thenable<boolean> {
 		if (trace)
 			this.log("stderr", "step");
 		return new Promise((resolve, reject) => {
-			this.sendCommand("exec-step" + (reverse ? " --reverse" : "")).then((info) => {
+			this.sendCommand("exec-step" + ` --thread ${thread}` + (reverse ? " --reverse" : "")).then((info) => {
 				resolve(info.resultRecords.resultClass == "running");
 			}, reject);
 		});
 	}
 
-	stepOut(reverse: boolean = false): Thenable<boolean> {
+	stepOut(thread: number, reverse: boolean = false): Thenable<boolean> {
 		if (trace)
 			this.log("stderr", "stepOut");
 		return new Promise((resolve, reject) => {
-			this.sendCommand("exec-finish" + (reverse ? " --reverse" : "")).then((info) => {
+			this.sendCommand("exec-finish" + ` --thread ${thread}` + (reverse ? " --reverse" : "")).then((info) => {
 				resolve(info.resultRecords.resultClass == "running");
 			}, reject);
 		});

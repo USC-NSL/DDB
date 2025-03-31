@@ -83,9 +83,9 @@ export interface IBackend {
 	detach(): void;
 	interrupt(): Thenable<boolean>;
 	continue(): Thenable<boolean>;
-	next(): Thenable<boolean>;
-	step(): Thenable<boolean>;
-	stepOut(): Thenable<boolean>;
+	next(thread: number): Thenable<boolean>;
+	step(thread: number): Thenable<boolean>;
+	stepOut(thread: number): Thenable<boolean>;
 	loadBreakPoints(breakpoints: Breakpoint[]): Thenable<[boolean, Breakpoint][]>;
 	addBreakPoint(breakpoint: Breakpoint): Thenable<Breakpoint>;
 	removeBreakPoint(breakpoint: Breakpoint): Thenable<boolean>;

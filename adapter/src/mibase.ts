@@ -15,7 +15,7 @@ import { setFlagsFromString } from 'v8';
 import { Debugger } from 'inspector';
 import { send } from 'process';
 
-const trace = false;
+const trace = true;
 class ExtendedVariable {
 	constructor(public name: string, public options: { "arg": any }) {
 	}
@@ -974,7 +974,7 @@ export class MI2DebugSession extends DebugSession {
 	protected override stepBackRequest(response: DebugProtocol.StepBackResponse, args: DebugProtocol.StepBackArguments): void {
 		if (trace)
 			this.miDebugger.log("stderr", `stepBackRequest${JSON.stringify(args)}`)
-		this.miDebugger.step(true).then(done => {
+		this.miDebugger.step(args.threadId, true).then(done => {
 			this.sendResponse(response);
 		}, msg => {
 			this.sendErrorResponse(response, 4, `Could not step back: ${msg} - Try running 'target record-full' before stepping back`);
@@ -984,7 +984,7 @@ export class MI2DebugSession extends DebugSession {
 	protected override stepInRequest(response: DebugProtocol.NextResponse, args: DebugProtocol.NextArguments): void {
 		if (trace)
 			this.miDebugger.log("stderr", `stepInRequest${JSON.stringify(args)}`)
-		this.miDebugger.step().then(done => {
+		this.miDebugger.step(args.threadId).then(done => {
 			this.sendResponse(response);
 		}, msg => {
 			this.sendErrorResponse(response, 4, `Could not step in: ${msg}`);
@@ -994,7 +994,7 @@ export class MI2DebugSession extends DebugSession {
 	protected override stepOutRequest(response: DebugProtocol.NextResponse, args: DebugProtocol.NextArguments): void {
 		if (trace)
 			this.miDebugger.log("stderr", `stepOutRequest${JSON.stringify(args)}`)
-		this.miDebugger.stepOut().then(done => {
+		this.miDebugger.stepOut(args.threadId).then(done => {
 			this.sendResponse(response);
 		}, msg => {
 			this.sendErrorResponse(response, 5, `Could not step out: ${msg}`);
@@ -1004,7 +1004,7 @@ export class MI2DebugSession extends DebugSession {
 	protected override nextRequest(response: DebugProtocol.NextResponse, args: DebugProtocol.NextArguments): void {
 		if (trace)
 			this.miDebugger.log("stderr", `nextRequest${JSON.stringify(args)}`)
-		this.miDebugger.next().then(done => {
+		this.miDebugger.next(args.threadId).then(done => {
 			this.sendResponse(response);
 		}, msg => {
 			this.sendErrorResponse(response, 6, `Could not step over: ${msg}`);
