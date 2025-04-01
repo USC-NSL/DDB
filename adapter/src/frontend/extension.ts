@@ -82,7 +82,7 @@ async function promptForSessions(): Promise<Array<{ sessionId: string }>> {
     const sessions = await getAvailableSessions(); // Implement this function
     return await vscode.window.showQuickPick(
         sessions.map(session => ({
-            label: `${session.sid} (${session.tag})`,
+            label: `[${session.alias}] sid=${session.sid}, tag=${session.tag}`,
             description: session.status,
             sessionId: session.sid
         })),
