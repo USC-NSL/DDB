@@ -48,7 +48,7 @@ export class MI2DebugSession extends DebugSession {
 	protected miDebugger: MI2;
 	protected commandServer: net.Server;
 	protected serverPath: string;
-	protected m_threads:Map<number,Thread> = new Map();
+	protected m_threads: Map<number, Thread> = new Map();
 	public constructor(debuggerLinesStartAt1: boolean, isServer: boolean = false) {
 		super(debuggerLinesStartAt1, isServer);
 	}
@@ -152,7 +152,7 @@ export class MI2DebugSession extends DebugSession {
 				this.miDebugger.log("stderr", `sending stop event${parseInt(thread_id)}`)
 				const event = new StoppedEvent("", parseInt(thread_id));
 				//@ts-ignore
-				event.body.preserveFocusHint=true
+				event.body.preserveFocusHint = true
 				this.sendEvent(event);
 			}
 		} else {
@@ -160,10 +160,10 @@ export class MI2DebugSession extends DebugSession {
 			(event as DebugProtocol.StoppedEvent).body.allThreadsStopped = true;
 			this.sendEvent(event);
 		}
-		this.sendEvent(new DebugAdapter.Event("breakpointCustom",{
-			session_id:session_id,
-			file:info.record("frame.file"),
-			line:info.record("frame.line"),
+		this.sendEvent(new DebugAdapter.Event("breakpointCustom", {
+			session_id: session_id,
+			file: info.record("frame.file"),
+			line: info.record("frame.line"),
 		}))
 	}
 
@@ -179,7 +179,7 @@ export class MI2DebugSession extends DebugSession {
 					this.miDebugger.log("stderr", `sending stop event${parseInt(thread_id)}`)
 					const event = new StoppedEvent("", parseInt(thread_id));
 					//@ts-ignore
-					event.body.preserveFocusHint=true
+					event.body.preserveFocusHint = true
 					this.sendEvent(event);
 				}
 			}
@@ -202,7 +202,7 @@ export class MI2DebugSession extends DebugSession {
 				this.miDebugger.log("stderr", `sending stop event${parseInt(thread_id)}`)
 				const event = new StoppedEvent("", parseInt(thread_id));
 				//@ts-ignore
-				event.body.preserveFocusHint=true
+				event.body.preserveFocusHint = true
 				this.sendEvent(event);
 				//@ts-ignore
 			}
@@ -234,7 +234,13 @@ export class MI2DebugSession extends DebugSession {
 	protected threadCreatedEvent(info: MINode) {
 		if (trace)
 			this.miDebugger.log("stderr", `threadCreatedEvent${JSON.stringify(info)}`)
-		this.m_threads.set(parseInt(info.record("id")), new Thread(parseInt(info.record("id")), info.record("session-id")+ "-" + info.record("id") + "-" + info.record("group-id")));
+		this.m_threads.set(
+			parseInt(info.record("id")), 
+			new Thread(
+				parseInt(info.record("id")), 
+				`[${info.record("session-alias")}]: Thread ${info.record("id")}, sid = ${info.record("session-id")}`
+			)
+		);
 		this.sendEvent(new ThreadEvent("started", info.record("id")));
 	}
 
@@ -324,7 +330,7 @@ export class MI2DebugSession extends DebugSession {
 			this.miDebugger.log("stderr", `setFunctionBreakPointsRequest${JSON.stringify(args)}`)
 		const all = [];
 		args.breakpoints.forEach(brk => {
-			all.push(this.miDebugger.addBreakPoint({ raw: brk.name, condition: brk.condition, countCondition: brk.hitCondition}));
+			all.push(this.miDebugger.addBreakPoint({ raw: brk.name, condition: brk.condition, countCondition: brk.hitCondition }));
 		});
 		Promise.all(all).then(brkpoints => {
 			const finalBrks: DebugProtocol.Breakpoint[] = [];
@@ -340,7 +346,7 @@ export class MI2DebugSession extends DebugSession {
 			this.sendErrorResponse(response, 10, msg.toString());
 		});
 	}
-	
+
 	protected override async customRequest(command: string, response: DebugProtocol.Response, args: any, request?: DebugProtocol.Request): Promise<void> {
 		// return
 		if (command.includes("setSessionBreakpoints")) {
@@ -462,8 +468,8 @@ export class MI2DebugSession extends DebugSession {
 			});
 		}
 	}
-	private bkptRequests:Record<number,{}> =[]
-	private bkptmap=new Map<string,DebugProtocol.SourceBreakpoint[]>()
+	private bkptRequests: Record<number, {}> = []
+	private bkptmap = new Map<string, DebugProtocol.SourceBreakpoint[]>()
 	protected override setBreakPointsRequest(response: DebugProtocol.SetBreakpointsResponse, args: DebugProtocol.SetBreakpointsArguments): void {
 		if (trace)
 			this.miDebugger.log("stderr", `setBreakPointsRequest${JSON.stringify(args)}`)
@@ -481,14 +487,14 @@ export class MI2DebugSession extends DebugSession {
 		// }
 		// this.sendResponse(response);
 		// return;
-		const waitForAysyncSession= new Promise<DebugProtocol.SetBreakpointsResponse>((resolve, reject) => {
-			this.bkptRequests[response.request_seq] = [resolve,reject];
-			
+		const waitForAysyncSession = new Promise<DebugProtocol.SetBreakpointsResponse>((resolve, reject) => {
+			this.bkptRequests[response.request_seq] = [resolve, reject];
+
 		})
-		waitForAysyncSession.then((cresponse)=>{
+		waitForAysyncSession.then((cresponse) => {
 			response.body = cresponse.body;
 			this.sendResponse(response);
-		},(error)=>{
+		}, (error) => {
 			this.sendErrorResponse(response, 9, error.toString());
 		});
 	}
@@ -521,14 +527,14 @@ export class MI2DebugSession extends DebugSession {
 		};
 		this.sendResponse(response);
 		// this.miDebugger.getThreads().then(threads => {
-			
+
 		// 	threads.sort((a, b) => a.id - b.id);
 		// 	for (const thread of threads) {
 		// 		const threadName = thread.name || thread.targetId || "<unnamed>";
 		// 		response.body.threads.push(new Thread(thread.id, thread.id + ":" + threadName));
 		// 	}
 		// 	this.miDebugger.log("stderr", `threadsRequest send response ${response.seq}`)
-			
+
 		// 	this.cachedThreadsResponse = response;
 		// }).catch((error: MIError) => {
 		// 	if (error.message === 'Selected thread is running.') {
@@ -540,16 +546,16 @@ export class MI2DebugSession extends DebugSession {
 	}
 
 	// Supports 65535 threads.
-	protected threadAndLevelToFrameId(threadId: number, level: number, sessionId: number ) {
+	protected threadAndLevelToFrameId(threadId: number, level: number, sessionId: number) {
 
 		return level << 16 | threadId | sessionId << 24;
 	}
 	protected frameIdToThreadAndLevelAndSessionId(frameId: number): [number, number, number] {
-        const threadId = frameId & 0xffff;
-        const level = (frameId >> 16) & 0xff;
-        const sessionId = frameId >>> 24;
-        return [threadId, level, sessionId];
-    }
+		const threadId = frameId & 0xffff;
+		const level = (frameId >> 16) & 0xff;
+		const sessionId = frameId >>> 24;
+		return [threadId, level, sessionId];
+	}
 
 	protected override stackTraceRequest(response: DebugProtocol.StackTraceResponse, args: DebugProtocol.StackTraceArguments): void {
 		if (trace)
@@ -658,7 +664,7 @@ export class MI2DebugSession extends DebugSession {
 
 	protected override scopesRequest(response: DebugProtocol.ScopesResponse, args: DebugProtocol.ScopesArguments): void {
 		const scopes = new Array<Scope>();
-		const [threadId, level,session_id] = this.frameIdToThreadAndLevelAndSessionId(args.frameId);
+		const [threadId, level, session_id] = this.frameIdToThreadAndLevelAndSessionId(args.frameId);
 
 		const createScope = (scopeName: string, expensive: boolean): Scope => {
 			const key: string = scopeName + ":" + threadId + ":" + level + ":" + session_id;
@@ -730,7 +736,7 @@ export class MI2DebugSession extends DebugSession {
 									if (!hasVar) {
 										throw new Error("Variable object not found");
 									}
-									const changes = await this.miDebugger.varUpdate(id.threadId,id.level,varObjName);
+									const changes = await this.miDebugger.varUpdate(id.threadId, id.level, varObjName);
 									const changelist = changes.result("changelist");
 									changelist.forEach((change: any) => {
 										const name = MINode.valueOf(change, "name");
@@ -742,7 +748,7 @@ export class MI2DebugSession extends DebugSession {
 									varObj = this.variableHandles.get(varId) as any;
 								} catch (err) {
 									if ((err instanceof MIError && (err.message == "Variable object not found" || err.message.endsWith("does not exist")))
-									|| (err instanceof Error && err.message == "Variable object not found")) {
+										|| (err instanceof Error && err.message == "Variable object not found")) {
 										varObj = await this.miDebugger.varCreate(id.threadId, id.level, variable.name, varObjName);
 										const varId = findOrCreateVariable(varObj);
 										varObj.exp = variable.name;
@@ -825,7 +831,7 @@ export class MI2DebugSession extends DebugSession {
 				// Variable members
 				let children: VariableObject[];
 				try {
-					children = await this.miDebugger.varListChildren(id.threadId,id.name);
+					children = await this.miDebugger.varListChildren(id.threadId, id.name);
 					const vars = children.map(child => {
 						const varId = findOrCreateVariable(child);
 						child.id = varId;
@@ -913,12 +919,12 @@ export class MI2DebugSession extends DebugSession {
 		// async handling
 		if (trace)
 			this.miDebugger.log("stderr", `pauseRequest${JSON.stringify(args)}`)
-		let command="exec-interrupt"
+		let command = "exec-interrupt"
 		//@ts-ignore
-		if(args.sessionId != undefined){
+		if (args.sessionId != undefined) {
 			//@ts-ignore
 			command += ` --session ${args.sessionId}`
-		}else{
+		} else {
 			command += ` --all`
 		}
 		this.miDebugger.sendCommand(command)
@@ -950,12 +956,12 @@ export class MI2DebugSession extends DebugSession {
 	protected override continueRequest(response: DebugProtocol.ContinueResponse, args: DebugProtocol.ContinueArguments): void {
 		if (trace)
 			this.miDebugger.log("stderr", `continueRequest${JSON.stringify(args)}`)
-		let command="exec-continue"
+		let command = "exec-continue"
 		//@ts-ignore
-		if (args.sessionId != undefined) { 
+		if (args.sessionId != undefined) {
 			//@ts-ignore
 			command += ` --session ${args.sessionId}`
-		} else{
+		} else {
 			command += ` --all`
 		}
 
@@ -1026,10 +1032,10 @@ export class MI2DebugSession extends DebugSession {
 		else
 			return this.variableHandles.create(arg);
 	};
-	protected override async evaluateRequest(response: DebugProtocol.EvaluateResponse, args: DebugProtocol.EvaluateArguments):Promise<void> {
+	protected override async evaluateRequest(response: DebugProtocol.EvaluateResponse, args: DebugProtocol.EvaluateArguments): Promise<void> {
 		if (trace)
 			this.miDebugger.log("stderr", `evaluateRequest${JSON.stringify(args)}`)
-		
+
 		const [threadId, level, session_id] = this.frameIdToThreadAndLevelAndSessionId(args.frameId);
 		if (args.context == "watch" || args.context == "hover") {
 			try {
@@ -1040,7 +1046,7 @@ export class MI2DebugSession extends DebugSession {
 					if (!hasVar) {
 						throw new Error("Variable object not found");
 					}
-					const changes = await this.miDebugger.varUpdate(threadId,level,varObjName);
+					const changes = await this.miDebugger.varUpdate(threadId, level, varObjName);
 					const changelist = changes.result("changelist");
 					changelist.forEach((change: any) => {
 						const name = MINode.valueOf(change, "name");
@@ -1052,7 +1058,7 @@ export class MI2DebugSession extends DebugSession {
 					varObj = this.variableHandles.get(varId) as any;
 				} catch (err) {
 					if ((err instanceof MIError && (err.message == "Variable object not found" || err.message.endsWith("does not exist")))
-					|| (err instanceof Error && err.message == "Variable object not found")) {
+						|| (err instanceof Error && err.message == "Variable object not found")) {
 						varObj = await this.miDebugger.varCreate(threadId, level, args.expression, varObjName);
 						const varId = this.findOrCreateVariable(varObj);
 						varObj.exp = args.expression;
