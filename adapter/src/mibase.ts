@@ -584,8 +584,13 @@ export class MI2DebugSession extends DebugSession {
 					element.line,
 					0));
 			});
+			
+			// Apply the startFrame and levels filter to the stack frames
+			const filteredStack = ret.slice(args.startFrame, (args.levels !== 0) ? args.startFrame + args.levels : undefined);
+			
 			response.body = {
-				stackFrames: ret
+				stackFrames: filteredStack,
+				totalFrames: stack.length
 			};
 			this.sendResponse(response);
 		}, err => {
