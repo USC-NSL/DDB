@@ -3,7 +3,7 @@ import axios from 'axios';
 import { Breakpoint } from 'vscode-debugadapter';
 import { logger } from './logger';
 
-class SessionsCommandsProvider implements vscode.TreeDataProvider<SessionItem | CommandItem | BreakPointItem> {
+class SessionsCommandsProvider implements vscode.TreeDataProvider<SessionItem | SessionItemDetail | CommandItem | BreakPointItem> {
 	private _onDidChangeTreeData: vscode.EventEmitter<SessionItem | CommandItem | undefined | null | void> = new vscode.EventEmitter<SessionItem | CommandItem | undefined | null | void>();
 	readonly onDidChangeTreeData: vscode.Event<SessionItem | CommandItem | undefined | null | void> = this._onDidChangeTreeData.event;
 
@@ -18,18 +18,37 @@ class SessionsCommandsProvider implements vscode.TreeDataProvider<SessionItem | 
 		return element;
 	}
 
-	async getChildren(element?: SessionItem | CommandItem | BreakPointItem): Promise<(SessionItem | CommandItem | BreakPointItem)[]> {
+	async getChildren(element?: SessionItem | CommandItem | BreakPointItem | SessionItemDetail): Promise<(SessionItem | SessionItemDetail | CommandItem | BreakPointItem)[]> {
 		if (!element) {
 			// Root level: Sessions, Pending Commands, Finished Commands
 			return [
-				new SessionItem('Sessions', vscode.TreeItemCollapsibleState.Collapsed),
+				new SessionItem('Sessions', vscode.TreeItemCollapsibleState.Collapsed, false),
 				new CommandItem('Pending Commands', vscode.TreeItemCollapsibleState.Collapsed, 'pending'),
 				new CommandItem('Finished Commands', vscode.TreeItemCollapsibleState.Collapsed, 'finished'),
 				new BreakPointItem('Breakpoint', [], vscode.TreeItemCollapsibleState.Collapsed),
 			];
-		} else if (element instanceof SessionItem && element.label === 'Sessions') {
-			// Fetch and return sessions
-			return this.getSessions();
+		} else if (element instanceof SessionItem) {
+			if (element.label === 'Sessions') {
+				// Fetch and return sessions
+				return this.getSessions();
+			} 
+			
+			if (element.sessionDetails) {
+				const sessionDetails = element.sessionDetails;
+				const sessionDetailsItems: SessionItemDetail[] = [];
+				for (const key in sessionDetails) {
+					if (Object.prototype.hasOwnProperty.call(sessionDetails, key)) {
+						const value = sessionDetails[key];
+						const sessionDetailItem = new SessionItemDetail(
+							key,
+							vscode.TreeItemCollapsibleState.None,
+							value
+						);
+						sessionDetailsItems.push(sessionDetailItem);
+					}
+				}
+				return sessionDetailsItems		
+			}
 		} else if (element instanceof CommandItem && element.label === 'Pending Commands') {
 			// Fetch and return pending commands
 			return this.getCommands('pending');
@@ -51,14 +70,22 @@ class SessionsCommandsProvider implements vscode.TreeDataProvider<SessionItem | 
 	private async getSessions(): Promise<SessionItem[]> {
 		try {
 			const response = await axios.get(`${this.apiBaseUrl}/sessions`);
-			return response.data.map((session: any) =>
-				new SessionItem(
-					`${session.sid} (${session.tag})`,
-					vscode.TreeItemCollapsibleState.None,
+			// Return sessions with collapsible state to make them expandable
+			return response.data.map((session: any) => {
+				const sessionItem = new SessionItem(
+					`[${session.alias}] ${session.tag}`,
+					vscode.TreeItemCollapsibleState.Collapsed,
+					true,
 					session.status,
-					session.sid
-				)
-			);
+					String(session.sid),
+					{
+						"alias": String(session.alias),
+						"sid": String(session.sid),
+						"tag": session.tag,
+					}
+				);
+				return sessionItem;
+			});
 		} catch (error) {
 			vscode.window.showErrorMessage('Failed to fetch sessions');
 			return [];
@@ -84,19 +111,41 @@ class SessionItem extends vscode.TreeItem {
 		const args = encodeURIComponent(JSON.stringify([this.sessionId]));
 		return `<a href="command:${command}?${args}" title="${title}"><span style="color: var(--vscode-textLink-foreground);">$(${icon})</span></a>`;
 	}
+
 	constructor(
 		public readonly label: string,
 		public readonly collapsibleState: vscode.TreeItemCollapsibleState,
+		public readonly showStatus: boolean,
 		public readonly status?: string,
-		public readonly sessionId?: string
+		public readonly sessionId?: string,
+		public readonly sessionDetails?: any
 	) {
 		super(label, collapsibleState);
-		if (collapsibleState === vscode.TreeItemCollapsibleState.None) {
+		this.sessionDetails = sessionDetails;
+
+		// Add icons for expandable items
+		// if (collapsibleState === vscode.TreeItemCollapsibleState.Collapsed || 
+		// 	collapsibleState === vscode.TreeItemCollapsibleState.Expanded) {
+		// 	this.iconPath = new vscode.ThemeIcon('debug-session');
+		// }
+
+		if (showStatus) {
 			this.description = this.status;
 			this.sessionId = sessionId;
 			// Add a context value to enable right-click menu actions
 			this.contextValue = 'sessionItem';
-		}
+		} 
+	}
+}
+
+class SessionItemDetail extends vscode.TreeItem {
+	constructor(
+		public readonly label: string,
+		public readonly collapsibleState: vscode.TreeItemCollapsibleState,
+		public readonly description: string,
+	) {
+		super(label, collapsibleState);
+		this.description = description;
 	}
 }
 
