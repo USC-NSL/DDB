@@ -50,7 +50,7 @@ function getBreakpointId(bp: vscode.Breakpoint): string {
 		const filePath = vscode.Uri.parse(bp.location.uri.toString()).fsPath;
 		// Normalize the path to ensure consistency
 		const normalizedPath = path.normalize(filePath);
-		return `${normalizedPath}:${bp.location.range.start.line+1}`;
+		return `${normalizedPath}:${bp.location.range.start.line + 1}`;
 	}
 	else if (bp instanceof vscode.FunctionBreakpoint) {
 		return bp.functionName;
@@ -59,44 +59,44 @@ function getBreakpointId(bp: vscode.Breakpoint): string {
 	}
 }
 function getBreakpointIdFromDAP(bp: DebugProtocol.SourceBreakpoint, dapPath: string): string {
-    // Normalize the DAP path to ensure consistency
-    const normalizedPath = path.normalize(dapPath);
-    return `${normalizedPath}:${bp.line}`;
+	// Normalize the DAP path to ensure consistency
+	const normalizedPath = path.normalize(dapPath);
+	return `${normalizedPath}:${bp.line}`;
 }
 function associateBreakpointWithSessions(bp: vscode.Breakpoint, sessionIds: string[]) {
-    const bpId = getBreakpointId(bp);
-    breakpointSessionsMap.set(bpId, sessionIds);
+	const bpId = getBreakpointId(bp);
+	breakpointSessionsMap.set(bpId, sessionIds);
 }
 
 async function getAvailableSessions(): Promise<any[]> {
 	const apiBaseUrl = "http://localhost:5000"
-    try {
-        const response = await axios.get(`${apiBaseUrl}/sessions`);
-        return response.data; // Adjust according to your API's response format
-    } catch (error) {
-        vscode.window.showErrorMessage('Failed to fetch sessions');
-        return [];
-    }
+	try {
+		const response = await axios.get(`${apiBaseUrl}/sessions`);
+		return response.data; // Adjust according to your API's response format
+	} catch (error) {
+		vscode.window.showErrorMessage('Failed to fetch sessions');
+		return [];
+	}
 }
 async function promptForSessions(): Promise<Array<{ sessionId: string }>> {
-    const sessions = await getAvailableSessions(); // Implement this function
-    return await vscode.window.showQuickPick(
-        sessions.map(session => ({
-            label: `[${session.alias}] sid=${session.sid}, tag=${session.tag}`,
-            description: session.status,
-            sessionId: session.sid
-        })),
-        {
-            canPickMany: true,
-            placeHolder: 'Select sessions to apply the breakpoint to'
-        }
-    );
+	const sessions = await getAvailableSessions(); // Implement this function
+	return await vscode.window.showQuickPick(
+		sessions.map(session => ({
+			label: `[${session.alias}] sid=${session.sid}, tag=${session.tag}`,
+			description: session.status,
+			sessionId: session.sid
+		})),
+		{
+			canPickMany: true,
+			placeHolder: 'Select sessions to apply the breakpoint to'
+		}
+	);
 }
 
 function convertToVSCodeBreakpoint(bp: any, source: any): vscode.Breakpoint {
-    const uri = vscode.Uri.parse(source.path);
-    const location = new vscode.Location(uri, new vscode.Position(bp.line - 1, bp.column ? bp.column - 1 : 0));
-    return new vscode.SourceBreakpoint(location, bp.enabled, bp.condition, bp.hitCondition, bp.logMessage);
+	const uri = vscode.Uri.parse(source.path);
+	const location = new vscode.Location(uri, new vscode.Position(bp.line - 1, bp.column ? bp.column - 1 : 0));
+	return new vscode.SourceBreakpoint(location, bp.enabled, bp.condition, bp.hitCondition, bp.logMessage);
 }
 
 declare module 'vscode-debugprotocol' {
@@ -104,86 +104,88 @@ declare module 'vscode-debugprotocol' {
 		interface SourceBreakpoint {
 			sessionIds?: string[];
 			transactionId?: number;
+			sessionAliases?: string[];
 		}
-		interface Breakpoint{
+		interface Breakpoint {
 			sessionIds?: string[];
 		}
-		interface SetBreakpointsArguments{
+		interface SetBreakpointsArguments {
 			transactionId?: number;
 		}
-		interface SetBreakpointsResponse{
+		interface SetBreakpointsResponse {
 			transactionId?: number;
 		}
 	}
 }
 declare module 'vscode' {
-	interface Breakpoint{
+	interface Breakpoint {
 		sessionIds?: string[];
+		// sessionAliases?: string[];
 		processing?: boolean;
 		transactionId?: number;
 	}
 }
 async function handleSetBreakpoints(message: any) {
-	console.log("Handling setBreakpoints message: ",message);
+	console.log("Handling setBreakpoints message: ", message);
 	const messageArguments = message.arguments as DebugProtocol.SetBreakpointsArguments;
-    const breakpoints = messageArguments.breakpoints 
-    const source = message.arguments.source;
+	const breakpoints = messageArguments.breakpoints
+	const source = message.arguments.source;
 	const breakpointsToRemove = [];
-    for (const bp of breakpoints) {
-        // Check if the breakpoint already has session IDs
-		const bkptLinePathId=getBreakpointIdFromDAP(bp,source.path);
+	for (const bp of breakpoints) {
+		// Check if the breakpoint already has session IDs
+		const bkptLinePathId = getBreakpointIdFromDAP(bp, source.path);
 		const sessions = breakpointSessionsMap.get(bkptLinePathId);
-        if(sessions?.length==0){
-			let selectedSessions=await promptForSessions();
+		if (sessions?.length == 0) {
+			let selectedSessions = await promptForSessions();
 			if (selectedSessions?.length === 0) {
-				selectedSessions=await getAvailableSessions();
+				selectedSessions = await getAvailableSessions();
 			}
 			if (selectedSessions?.length !== 0) {
-				breakpointSessionsMap.set(bkptLinePathId,selectedSessions.map(s=>s.sessionId));
+				breakpointSessionsMap.set(bkptLinePathId, selectedSessions.map(s => s.sessionId));
 			}
 		}
 		bp.sessionIds = breakpointSessionsMap.get(bkptLinePathId);
-    }
+	}
 	updateInlineDecorations();
 	// Send the modified setBreakpoints request to the debug adapter
 	// message.arguments.breakpoints = message.arguments.breakpoints.filter(bp => !breakpointsToRemove.includes(bp));
 	const session = vscode.debug.activeDebugSession;
-	const response:DebugProtocol.SetBreakpointsResponse= await session.customRequest('setSessionBreakpoints',message);
+	const response: DebugProtocol.SetBreakpointsResponse = await session.customRequest('setSessionBreakpoints', message);
 	// add sessionids to vscode breakpoints
-	for(const vscodebp of vscode.debug.breakpoints){
-		if(vscodebp instanceof vscode.SourceBreakpoint){
-			const bpLine=vscodebp.location.range.start.line+1;
-			const bpUri=vscodebp.location.uri.toString()
+	for (const vscodebp of vscode.debug.breakpoints) {
+		if (vscodebp instanceof vscode.SourceBreakpoint) {
+			const bpLine = vscodebp.location.range.start.line + 1;
+			const bpUri = vscodebp.location.uri.toString()
 			//@ts-ignore
-			const found=response.breakpoints.find((bp:DebugProtocol.Breakpoint)=>bp.line===bpLine && bpUri.endsWith(bp.source.path));
-			if(found){
-				vscodebp.sessionIds=found.sessionIds;
-				vscodebp.processing=false;
+			const found = response.breakpoints.find((bp: DebugProtocol.Breakpoint) => bp.line === bpLine && bpUri.endsWith(bp.source.path));
+			if (found) {
+				vscodebp.sessionIds = found.sessionIds;
+				vscodebp.processing = false;
 			}
 		}
 	}
 	breakpointSessionsMapExp.clear();
 	//@ts-ignore
-	for(const bp of response.breakpoints){
-		breakpointSessionsMapExp.set(getBreakpointIdFromDAP(bp,source.path),bp.sessionIds);
+	for (const bp of response.breakpoints) {
+		breakpointSessionsMapExp.set(getBreakpointIdFromDAP(bp, source.path), bp.sessionIds);
 	}
 	updateInlineDecorations();
 }
 
 class MyDebugAdapterTrackerFactory implements vscode.DebugAdapterTrackerFactory {
-    createDebugAdapterTracker(session: vscode.DebugSession): vscode.ProviderResult<vscode.DebugAdapterTracker> {
-        return new MyDebugAdapterTracker();
-    }
+	createDebugAdapterTracker(session: vscode.DebugSession): vscode.ProviderResult<vscode.DebugAdapterTracker> {
+		return new MyDebugAdapterTracker();
+	}
 }
 class MyDebugAdapterTracker implements vscode.DebugAdapterTracker {
-    async onWillReceiveMessage(message: any) {
-        if (message.command === 'setBreakpoints') {
-            // Intercept the setBreakpoints request
+	async onWillReceiveMessage(message: any) {
+		if (message.command === 'setBreakpoints') {
+			// Intercept the setBreakpoints request
 			await handleSetBreakpoints(message);
-			
-        }
-    }
-	async onDidSendMessage(message:any){
+
+		}
+	}
+	async onDidSendMessage(message: any) {
 		if (message.command === 'setSessionBreakpoints') {
 			// Intercept the setBreakpoints request
 			// updateBreakpointDecorations();
@@ -194,129 +196,129 @@ class MyDebugAdapterTracker implements vscode.DebugAdapterTracker {
 
 
 function getSessionIdsFromBreakpoint(bp: vscode.SourceBreakpoint): string[] {
-    // Extract session IDs from the breakpoint's condition
-    if (bp.condition && bp.condition.startsWith('Sessions: ')) {
-        return bp.condition.substring('Sessions: '.length).split(', ').map(id => id.trim());
-    }
-    return [];
+	// Extract session IDs from the breakpoint's condition
+	if (bp.condition && bp.condition.startsWith('Sessions: ')) {
+		return bp.condition.substring('Sessions: '.length).split(', ').map(id => id.trim());
+	}
+	return [];
 }
 
 const inlineDecorationType = vscode.window.createTextEditorDecorationType({
-    backgroundColor: 'rgba(0, 255, 255, 0.1)', // Light cyan background
-    before: {
-        contentText: '$(debug-breakpoint) ', // Breakpoint icon
-        color: '#00CCCC', // Darker cyan for text
-        fontWeight: 'normal',
-        fontStyle: 'normal',
-        margin: '0 8px 0 0',
-    },
-    after: {
-        contentText: ' ', // Space to extend background
-        margin: '0 0 0 8px',
-    },
-    rangeBehavior: vscode.DecorationRangeBehavior.ClosedOpen,
+	backgroundColor: 'rgba(0, 255, 255, 0.1)', // Light cyan background
+	before: {
+		contentText: '$(debug-breakpoint) ', // Breakpoint icon
+		color: '#00CCCC', // Darker cyan for text
+		fontWeight: 'normal',
+		fontStyle: 'normal',
+		margin: '0 8px 0 0',
+	},
+	after: {
+		contentText: ' ', // Space to extend background
+		margin: '0 0 0 8px',
+	},
+	rangeBehavior: vscode.DecorationRangeBehavior.ClosedOpen,
 });
 
 function updateInlineDecorations() {
-    // Update decorations for all visible text editors
-    vscode.window.visibleTextEditors.forEach(editor => {
-        updateEditorDecorations(editor);
-    });
+	// Update decorations for all visible text editors
+	vscode.window.visibleTextEditors.forEach(editor => {
+		updateEditorDecorations(editor);
+	});
 }
 
 function updateEditorDecorations(editor: vscode.TextEditor) {
-    const decorations: vscode.DecorationOptions[] = [];
+	const decorations: vscode.DecorationOptions[] = [];
 
-    for (const bp of vscode.debug.breakpoints) {
-        if (bp instanceof vscode.SourceBreakpoint && bp.location.uri.toString() === editor.document.uri.toString()) {
-            const line = bp.location.range.start.line;
-            const range = new vscode.Range(line, 0, line, editor.document.lineAt(line).text.length);
-            
-            let statusText: string;
-            let backgroundColor: string;
-            let foregroundColor: string;
-            
-            if (bp.processing) {
-                statusText = '⟳ Processing...';
-                backgroundColor = 'rgba(255, 165, 0, 0.2)'; // Light orange background
-                foregroundColor = '#D68000'; // Darker orange text
-            } else {
-                statusText = `✓ Sessions: ${bp.sessionIds?.join(", ")}`;
-                backgroundColor = 'rgba(0, 204, 0, 0.2)'; // Light green background
-                foregroundColor = '#008000'; // Darker green text
-            }
+	for (const bp of vscode.debug.breakpoints) {
+		if (bp instanceof vscode.SourceBreakpoint && bp.location.uri.toString() === editor.document.uri.toString()) {
+			const line = bp.location.range.start.line;
+			const range = new vscode.Range(line, 0, line, editor.document.lineAt(line).text.length);
 
-            const decoration = {
-                range: range,
-                hoverMessage: new vscode.MarkdownString(`**Breakpoint Info**\n- Line: ${bp.location.range.start.line}\n- Column: ${bp.location.range.start.character}\n- Session IDs: ${bp.sessionIds?.join(', ')}`),
-                renderOptions: {
-                    before: {
-                        contentText: statusText,
-                        color: foregroundColor,
-                        fontWeight: 'bold',
-                        margin: '0 8px 0 0',
-                    },
-                    backgroundColor: backgroundColor,
-                    isWholeLine: true,
-                },
-            };
-            decorations.push(decoration);
-        }
-    }
-    editor.setDecorations(inlineDecorationType, decorations);
+			let statusText: string;
+			let backgroundColor: string;
+			let foregroundColor: string;
+
+			if (bp.processing) {
+				statusText = '⟳ Processing...';
+				backgroundColor = 'rgba(255, 165, 0, 0.2)'; // Light orange background
+				foregroundColor = '#D68000'; // Darker orange text
+			} else {
+				statusText = `✓ Sessions: ${bp.sessionIds?.join(", ")}`;
+				backgroundColor = 'rgba(0, 204, 0, 0.2)'; // Light green background
+				foregroundColor = '#008000'; // Darker green text
+			}
+
+			const decoration = {
+				range: range,
+				hoverMessage: new vscode.MarkdownString(`**Breakpoint Info**\n- Line: ${bp.location.range.start.line}\n- Column: ${bp.location.range.start.character}\n- Session IDs: ${bp.sessionIds?.join(', ')}`),
+				renderOptions: {
+					before: {
+						contentText: statusText,
+						color: foregroundColor,
+						fontWeight: 'bold',
+						margin: '0 8px 0 0',
+					},
+					backgroundColor: backgroundColor,
+					isWholeLine: true,
+				},
+			};
+			decorations.push(decoration);
+		}
+	}
+	editor.setDecorations(inlineDecorationType, decorations);
 }
-const trasactionId=0;
+const trasactionId = 0;
 export function activate(context: vscode.ExtensionContext) {
 	logger.info("Starting gdb adapter extension.......");
 
 	console.log("Starting gdb adapter extension.......");
 	let disposable = vscode.commands.registerCommand('extension.showInfo', () => {
-        vscode.window.showInformationMessage('Hello from your VSCode extension!');
-		const breakpoints=vscode.debug.breakpoints;
-		console.log("Breakpoints: ",breakpoints);
-    });
-    context.subscriptions.push(disposable);
+		vscode.window.showInformationMessage('Hello from your VSCode extension!');
+		const breakpoints = vscode.debug.breakpoints;
+		console.log("Breakpoints: ", breakpoints);
+	});
+	context.subscriptions.push(disposable);
 	vscode.debug.onDidStartDebugSession((session) => {
 		breakpointSessionsMap.clear();
 		breakpointSessionsMapExp.clear();
 	})
-	vscode.debug.onDidChangeBreakpoints(async (event)=>{
-		console.log("Breakpoints changed: ",event);
+	vscode.debug.onDidChangeBreakpoints(async (event) => {
+		console.log("Breakpoints changed: ", event);
 		event.added.forEach(
-			async (bp)=>{
+			async (bp) => {
 				// const selectedSessions = await promptForSessions();
-				bp.processing=true;
-				bp.transactionId=trasactionId;
-				breakpointSessionsMap.set(getBreakpointId(bp),[]);
+				bp.processing = true;
+				bp.transactionId = trasactionId;
+				breakpointSessionsMap.set(getBreakpointId(bp), []);
 			}
 		);
 		event.removed.forEach(
-			(bp)=>{
+			(bp) => {
 				breakpointSessionsMap.delete(getBreakpointId(bp));
 			}
 		);
 	});
 	context.subscriptions.push(
-        vscode.window.onDidChangeActiveTextEditor(() => {
-            updateInlineDecorations();
-        })
-    );
+		vscode.window.onDidChangeActiveTextEditor(() => {
+			updateInlineDecorations();
+		})
+	);
 
-    // Update decorations when the visible editors change
-    context.subscriptions.push(
-        vscode.window.onDidChangeVisibleTextEditors(() => {
-            updateInlineDecorations();
-        })
-    );
+	// Update decorations when the visible editors change
+	context.subscriptions.push(
+		vscode.window.onDidChangeVisibleTextEditors(() => {
+			updateInlineDecorations();
+		})
+	);
 
-    // Update decorations when breakpoints change
-    context.subscriptions.push(
-        vscode.debug.onDidChangeBreakpoints(() => {
-            updateInlineDecorations();
-        })
-    );
+	// Update decorations when breakpoints change
+	context.subscriptions.push(
+		vscode.debug.onDidChangeBreakpoints(() => {
+			updateInlineDecorations();
+		})
+	);
 	vscode.debug.registerDebugAdapterTrackerFactory('ddb', new MyDebugAdapterTrackerFactory());
-	ddbviewactivate(context,breakpointSessionsMapExp)
+	ddbviewactivate(context, breakpointSessionsMapExp)
 	// const rootPath =
 	// 	vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0
 	// 		? vscode.workspace.workspaceFolders[0].uri.fsPath
