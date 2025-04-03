@@ -15,7 +15,7 @@ import { setFlagsFromString } from 'v8';
 import { Debugger } from 'inspector';
 import { send } from 'process';
 
-const trace = true;
+const trace = false;
 class ExtendedVariable {
 	constructor(public name: string, public options: { "arg": any }) {
 	}
@@ -458,9 +458,14 @@ export class MI2DebugSession extends DebugSession {
 			const session_id = args.arguments.session_id
 			let sessionId = -1;
 			new Promise((resolve, reject) => {
-				this.miDebugger.sendCommand(`exec-continue --session ${session_id}`).then((info) => {
+				if (trace)
+					this.miDebugger.log("stderr", `custom continueRequest session_id: ${session_id}`)
+				this.miDebugger.sendCommand(`record-time-and-continue --session ${session_id}`).then((info) => {
 					resolve(info.resultRecords.resultClass == "done");
 				}, reject);
+				// this.miDebugger.sendCommand(`exec-continue --session ${session_id}`).then((info) => {
+				// 	resolve(info.resultRecords.resultClass == "done");
+				// }, reject);
 			}).then(done => {
 				this.sendResponse(response);
 			}, msg => {
@@ -960,8 +965,9 @@ export class MI2DebugSession extends DebugSession {
 
 	protected override continueRequest(response: DebugProtocol.ContinueResponse, args: DebugProtocol.ContinueArguments): void {
 		if (trace)
-			this.miDebugger.log("stderr", `continueRequest${JSON.stringify(args)}`)
-		let command = "exec-continue"
+			this.miDebugger.log("stderr", `continueRequest ${JSON.stringify(args)}`)
+		// let command = "exec-continue"
+		let command = "record-time-and-continue"
 		//@ts-ignore
 		if (args.sessionId != undefined) {
 			//@ts-ignore

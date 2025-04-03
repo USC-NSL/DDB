@@ -509,9 +509,14 @@ export class MI2 extends EventEmitter implements IBackend {
 		if (trace)
 			this.log("stderr", "continue");
 		return new Promise((resolve, reject) => {
-			this.sendCommand("exec-continue" + (reverse ? " --reverse" : "")).then((info) => {
+			if (trace)
+				this.log("stderr", `continuehandle continueRequest`);
+			this.sendCommand("record-time-and-continue" + (reverse ? " --reverse" : "")).then((info) => {
 				resolve(info.resultRecords.resultClass == "running");
 			}, reject);
+			// this.sendCommand("exec-continue" + (reverse ? " --reverse" : "")).then((info) => {
+			// 	resolve(info.resultRecords.resultClass == "running");
+			// }, reject);
 		});
 	}
 	switchThread(thread: number): Thenable<boolean> {
