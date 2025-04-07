@@ -101,6 +101,7 @@ export interface IBackend {
 
 export class VariableObject {
 	name: string;
+	nameToDisplay: string;
 	exp: string;
 	numchild: number;
 	type: string;
@@ -111,8 +112,10 @@ export class VariableObject {
 	displayhint: string;
 	hasMore: boolean;
 	id: number;
+
 	constructor(node: any, threadId?: number, parent?: VariableObject) {
 		this.name = MINode.valueOf(node, "name");
+		this.nameToDisplay = MINode.valueOf(node, "exp"); 
 		const self_exp = MINode.valueOf(node, "exp");
 		if (parent) {
 			if (parent.type.endsWith("**") || parent.type.endsWith("[]") || parent.displayhint === "array") {
@@ -167,7 +170,7 @@ export class VariableObject {
 
 	public toProtocolVariable(): DebugProtocol.Variable {
 		const res: DebugProtocol.Variable = {
-			name: this.exp,
+			name: this.nameToDisplay,
 			evaluateName: this.exp,
 			value: (this.value === void 0) ? "<unknown>" : this.value,
 			type: this.type,

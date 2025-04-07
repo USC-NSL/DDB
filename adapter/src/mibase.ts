@@ -152,7 +152,7 @@ export class MI2DebugSession extends DebugSession {
 		if (stopped_threads.length > 1) {
 			for (const thread_id of stopped_threads) {
 				if (parseInt(thread_id) == bp_thread_id) continue;
-				this.miDebugger.log("stderr", `sending stop event${parseInt(thread_id)}`)
+				// this.miDebugger.log("stderr", `sending stop event${parseInt(thread_id)}`)
 				const event = new StoppedEvent("", parseInt(thread_id));
 				//@ts-ignore
 				event.body.preserveFocusHint = true
@@ -179,7 +179,7 @@ export class MI2DebugSession extends DebugSession {
 		if (stopped_threads.length > 1) {
 			for (const thread_id of stopped_threads) {
 				if (parseInt(thread_id) != step_thread_id) {
-					this.miDebugger.log("stderr", `sending stop event${parseInt(thread_id)}`)
+					// this.miDebugger.log("stderr", `sending stop event${parseInt(thread_id)}`)
 					const event = new StoppedEvent("", parseInt(thread_id));
 					//@ts-ignore
 					event.body.preserveFocusHint = true
@@ -202,7 +202,7 @@ export class MI2DebugSession extends DebugSession {
 		const stopped_threads: [] = info.record("stopped-threads")
 		if (stopped_threads.length > 1) {
 			for (const thread_id of stopped_threads) {
-				this.miDebugger.log("stderr", `sending stop event${parseInt(thread_id)}`)
+				// this.miDebugger.log("stderr", `sending stop event${parseInt(thread_id)}`)
 				const event = new StoppedEvent("", parseInt(thread_id));
 				//@ts-ignore
 				event.body.preserveFocusHint = true
@@ -310,6 +310,8 @@ export class MI2DebugSession extends DebugSession {
 		if (trace)
 			this.miDebugger.log("stderr", `setVariableRequest${JSON.stringify(args)}`)
 		try {
+			const varId = this.variableHandlesReverse[args.name];
+			const varObj = this.variableHandles.get(varId) as any;
 			if (this.useVarObjects) {
 				let name = args.name;
 				const parent = this.variableHandles.get(args.variablesReference);
@@ -771,6 +773,7 @@ export class MI2DebugSession extends DebugSession {
 										|| (err instanceof Error && err.message == "Variable object not found")) {
 										varObj = await this.miDebugger.varCreate(id.threadId, id.level, variable.name, varObjName);
 										const varId = findOrCreateVariable(varObj);
+										varObj.nameToDisplay = variable.name;
 										varObj.exp = variable.name;
 										varObj.id = varId;
 									} else {

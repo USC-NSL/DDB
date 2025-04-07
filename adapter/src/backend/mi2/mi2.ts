@@ -1043,6 +1043,10 @@ export class MI2 extends EventEmitter implements IBackend {
 			const key = MINode.valueOf(element, "name");
 			const value = MINode.valueOf(element, "value");
 			const type = MINode.valueOf(element, "type");
+			if (!key) {
+				// Skip if any of the required properties are missing
+				continue;
+			}
 			ret.push({
 				name: key,
 				valueStr: value,
