@@ -111,9 +111,34 @@ export class VariableObject {
 	displayhint: string;
 	hasMore: boolean;
 	id: number;
-	constructor(node: any, threadId?: number) {
+	constructor(node: any, threadId?: number, parent?: VariableObject) {
 		this.name = MINode.valueOf(node, "name");
-		this.exp = MINode.valueOf(node, "exp");
+		const self_exp = MINode.valueOf(node, "exp");
+		if (parent) {
+			if (parent.type.endsWith("**") || parent.type.endsWith("[]") || parent.displayhint === "array") {
+				this.exp = `${parent.exp}[0]`;	// for arrays, we default to [0] to avoid invalid index in the expression
+				// Extract the index from self_exp, which should be in the format of a number if it's an array element
+				const indexMatch = self_exp.match(/^\[?(\d+)\]?$/);
+				if (indexMatch) {
+					// If self_exp is an index, use that index in the parent's expression
+					this.exp = `${parent.exp}[${indexMatch[1]}]`;
+				} 
+			} else if (parent.type.endsWith("*")) {
+				// for pointers, use the parent->exp
+	 			this.exp = `${parent.exp}->${self_exp}`
+			}
+			else if (parent.displayhint === "map") {
+				// for maps, use the parent.exp as the base for the key
+				this.exp = `${parent.exp}[${self_exp}]`;
+			}
+			else {
+				// otherwise, just append the name to the parent's exp
+				this.exp = `${parent.exp}.${self_exp}`;
+			}
+		} else {
+			// for top level variables, just use the exp as is
+			this.exp = self_exp;
+		}
 		this.numchild = parseInt(MINode.valueOf(node, "numchild"));
 		this.type = MINode.valueOf(node, "type");
 		this.value = MINode.valueOf(node, "value");
@@ -143,7 +168,7 @@ export class VariableObject {
 	public toProtocolVariable(): DebugProtocol.Variable {
 		const res: DebugProtocol.Variable = {
 			name: this.exp,
-			evaluateName: this.name,
+			evaluateName: this.exp,
 			value: (this.value === void 0) ? "<unknown>" : this.value,
 			type: this.type,
 			variablesReference: this.id

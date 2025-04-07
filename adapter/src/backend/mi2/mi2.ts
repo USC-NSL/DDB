@@ -1144,7 +1144,7 @@ export class MI2 extends EventEmitter implements IBackend {
 		return this.sendCommand(`var-evaluate-expression ${this.quote(name)}`);
 	}
 
-	async varListChildren(threadId: number,name: string): Promise<VariableObject[]> {
+	async varListChildren(threadId: number, name: string, parent?: VariableObject): Promise<VariableObject[]> {
 		if (trace)
 			this.log("stderr", "varListChildren");
 		//TODO: add `from` and `to` arguments
@@ -1154,7 +1154,7 @@ export class MI2 extends EventEmitter implements IBackend {
 		}
 		const res = await this.sendCommand(`${miCommand} --all-values ${this.quote(name)}`);
 		const children = res.result("children") || [];
-		const omg: VariableObject[] = children.map((child: any) => new VariableObject(child,threadId));
+		const omg: VariableObject[] = children.map((child: any) => new VariableObject(child, threadId, parent));
 		return omg;
 	}
 
