@@ -36,6 +36,7 @@ export class MI2DebugSession extends DebugSession {
 	protected variableHandles = new Handles<VariableScope | string | VariableObject | ExtendedVariable>();
 	protected variableHandlesReverse: { [id: string]: number } = {};
 	protected scopeHandlesReverse: { [key: string]: number } = {};
+	protected threadIdToSessionId: Map<number, number> = new Map();
 	protected useVarObjects: boolean;
 	protected quit: boolean;
 	protected attached: boolean;
@@ -49,6 +50,8 @@ export class MI2DebugSession extends DebugSession {
 	protected commandServer: net.Server;
 	protected serverPath: string;
 	protected m_threads: Map<number, Thread> = new Map();
+	protected goToTargets: Map<number, DebugProtocol.GotoTarget & { path: string }> = new Map();
+	
 	public constructor(debuggerLinesStartAt1: boolean, isServer: boolean = false) {
 		super(debuggerLinesStartAt1, isServer);
 	}
@@ -234,12 +237,17 @@ export class MI2DebugSession extends DebugSession {
 	protected threadCreatedEvent(info: MINode) {
 		if (trace)
 			this.miDebugger.log("stderr", `threadCreatedEvent${JSON.stringify(info)}`)
+		var threadId = parseInt(info.record("id"));
 		this.m_threads.set(
-			parseInt(info.record("id")), 
+			threadId,
 			new Thread(
-				parseInt(info.record("id")), 
+				threadId,
 				`[${info.record("session-alias")}]: Thread ${info.record("id")}, sid = ${info.record("session-id")}`
 			)
+		);
+		this.threadIdToSessionId.set(
+			threadId,
+			parseInt(info.record("session-id"))
 		);
 		this.sendEvent(new ThreadEvent("started", info.record("id")));
 	}
@@ -247,7 +255,9 @@ export class MI2DebugSession extends DebugSession {
 	protected threadExitedEvent(info: MINode) {
 		if (trace)
 			this.miDebugger.log("stderr", `threadExitedEvent${JSON.stringify(info)}`)
-		this.m_threads.delete(parseInt(info.record("id")));
+		var threadId = parseInt(info.record("id"));
+		this.m_threads.delete(threadId);
+		this.threadIdToSessionId.delete(threadId);
 		this.sendEvent(new ThreadEvent("exited", info.record("id")));
 	}
 
@@ -1115,25 +1125,34 @@ export class MI2DebugSession extends DebugSession {
 		if (trace)
 			this.miDebugger.log("stderr", `gotoTargetsRequest${JSON.stringify(args)}`)
 		const path: string = this.isSSH ? this.sourceFileMap.toRemotePath(args.source.path) : args.source.path;
-		this.miDebugger.goto(path, args.line).then(done => {
-			response.body = {
-				targets: [{
-					id: 1,
-					label: args.source.name,
-					column: args.column,
-					line: args.line
-				}]
-			};
-			this.sendResponse(response);
-		}, msg => {
-			this.sendErrorResponse(response, 16, `Could not jump: ${msg}`);
-		});
+		const targetId = this.goToTargets.size + 1;  // Generate monotonically increasing id
+		const target = {
+			id: targetId,
+			label: args.source.name,
+			column: args.column,
+			line: args.line,
+			path: path
+		};
+		this.goToTargets.set(targetId, target);
+
+		response.body = {
+			targets: [ target ]
+		};
+		this.sendResponse(response);
 	}
 
 	protected override gotoRequest(response: DebugProtocol.GotoResponse, args: DebugProtocol.GotoArguments): void {
 		if (trace)
 			this.miDebugger.log("stderr", `gotoRequest${JSON.stringify(args)}`)
-		this.sendResponse(response);
+		const sid = this.threadIdToSessionId.get(args.threadId);	
+		const targetId = args.targetId;
+		const target = this.goToTargets.get(targetId);
+
+		this.miDebugger.goto(target.path, target.line, sid).then(done => {
+			this.sendResponse(response);
+		}, msg => {
+			this.sendErrorResponse(response, 16, `Could not jump: ${msg}`);
+		});
 	}
 
 	protected setSourceFileMap(configMap: { [index: string]: string }, fallbackGDB: string, fallbackIDE: string): void {

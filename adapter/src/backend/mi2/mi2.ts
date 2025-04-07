@@ -568,13 +568,13 @@ export class MI2 extends EventEmitter implements IBackend {
 		});
 	}
 
-	goto(filename: string, line: number): Thenable<Boolean> {
+	goto(filename: string, line: number, sessionId: number): Thenable<Boolean> {
 		if (trace)
 			this.log("stderr", "goto");
 		return new Promise((resolve, reject) => {
 			const target: string = '"' + (filename ? escape(filename) + ":" : "") + line + '"';
-			this.sendCommand("break-insert -t " + target).then(() => {
-				this.sendCommand("exec-jump " + target).then((info) => {
+			this.sendCommand("break-insert -t -f " + target + ` --session ${sessionId}`).then(() => {
+				this.sendCommand("exec-jump " + target + ` --session ${sessionId}`).then((info) => {
 					resolve(info.resultRecords.resultClass == "running");
 				}, reject);
 			}, reject);
