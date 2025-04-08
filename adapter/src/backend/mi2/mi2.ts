@@ -890,7 +890,8 @@ export class MI2 extends EventEmitter implements IBackend {
 		return this.sendCommand("break-delete " + breakpoint.id + " --session " + breakpoint.sessionId).then((result) => {
 				if (result.resultRecords.resultClass === "done") {
 					this.breakpoints.get(this.generateBreakpointId(breakpoint.file,breakpoint.line))?.delete(breakpoint.sessionId);
-					if(this.breakpoints.get(this.generateBreakpointId(breakpoint.file,breakpoint.line)).size === 0){
+					const bkpts = this.breakpoints.get(this.generateBreakpointId(breakpoint.file,breakpoint.line));
+					if(bkpts && bkpts.size === 0){
 						this.breakpoints.delete(this.generateBreakpointId(breakpoint.file,breakpoint.line));
 					}
 					return true;
