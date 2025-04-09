@@ -15,7 +15,7 @@ import { setFlagsFromString } from 'v8';
 import { Debugger } from 'inspector';
 import { send } from 'process';
 
-const trace = false;
+const trace = true;
 class ExtendedVariable {
 	constructor(public name: string, public options: { "arg": any }) {
 	}
@@ -51,7 +51,7 @@ export class MI2DebugSession extends DebugSession {
 	protected serverPath: string;
 	protected m_threads: Map<number, Thread> = new Map();
 	protected goToTargets: Map<number, DebugProtocol.GotoTarget & { path: string }> = new Map();
-	
+
 	public constructor(debuggerLinesStartAt1: boolean, isServer: boolean = false) {
 		super(debuggerLinesStartAt1, isServer);
 	}
@@ -601,10 +601,10 @@ export class MI2DebugSession extends DebugSession {
 					element.line,
 					0));
 			});
-			
+
 			// Apply the startFrame and levels filter to the stack frames
 			const filteredStack = ret.slice(args.startFrame, (args.levels !== 0) ? args.startFrame + args.levels : undefined);
-			
+
 			response.body = {
 				stackFrames: filteredStack,
 				totalFrames: stack.length
@@ -1139,7 +1139,7 @@ export class MI2DebugSession extends DebugSession {
 		this.goToTargets.set(targetId, target);
 
 		response.body = {
-			targets: [ target ]
+			targets: [target]
 		};
 		this.sendResponse(response);
 	}
@@ -1147,7 +1147,7 @@ export class MI2DebugSession extends DebugSession {
 	protected override gotoRequest(response: DebugProtocol.GotoResponse, args: DebugProtocol.GotoArguments): void {
 		if (trace)
 			this.miDebugger.log("stderr", `gotoRequest${JSON.stringify(args)}`)
-		const sid = this.threadIdToSessionId.get(args.threadId);	
+		const sid = this.threadIdToSessionId.get(args.threadId);
 		const targetId = args.targetId;
 		const target = this.goToTargets.get(targetId);
 

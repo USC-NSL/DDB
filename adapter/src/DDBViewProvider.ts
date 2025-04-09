@@ -31,8 +31,8 @@ class SessionsCommandsProvider implements vscode.TreeDataProvider<SessionItem | 
 			if (element.label === 'Sessions') {
 				// Fetch and return sessions
 				return this.getSessions();
-			} 
-			
+			}
+
 			if (element.sessionDetails) {
 				const sessionDetails = element.sessionDetails;
 				const sessionDetailsItems: SessionItemDetail[] = [];
@@ -47,7 +47,7 @@ class SessionsCommandsProvider implements vscode.TreeDataProvider<SessionItem | 
 						sessionDetailsItems.push(sessionDetailItem);
 					}
 				}
-				return sessionDetailsItems		
+				return sessionDetailsItems
 			}
 		} else if (element instanceof CommandItem && element.label === 'Pending Commands') {
 			// Fetch and return pending commands
@@ -134,7 +134,7 @@ class SessionItem extends vscode.TreeItem {
 			this.sessionId = sessionId;
 			// Add a context value to enable right-click menu actions
 			this.contextValue = 'sessionItem';
-		} 
+		}
 	}
 }
 
@@ -183,10 +183,39 @@ class BreakPointItem extends vscode.TreeItem {
 		this.tooltip = new vscode.MarkdownString(`**${name}**\n\nSessions:\n${sessions.map(s => `- ${s}`).join('\n')}`);
 	}
 }
+
+let periodicRefreshIntervalId: NodeJS.Timeout | undefined;
 export function activate(context: vscode.ExtensionContext, breakpointSessionsMap: Map<string, string[]>) {
-	const apiBaseUrl = 'http://localhost:5000'; // Replace with your actual API base URL
+	const apiBaseUrl = 'http://localhost:5004'; // Replace with your actual API base URL
 	const sessionsCommandsProvider = new SessionsCommandsProvider(apiBaseUrl, breakpointSessionsMap);
-	vscode.window.registerTreeDataProvider('sessionsCommandsExplorer', sessionsCommandsProvider);
+	// vscode.window.registerTreeDataProvider('sessionsCommandsExplorer', sessionsCommandsProvider);
+	const treeView = vscode.window.createTreeView('sessionsCommandsExplorer', {
+		treeDataProvider: sessionsCommandsProvider
+	});
+
+	context.subscriptions.push(treeView); // Add TreeView to subscriptions
+
+	const visibilityListener = treeView.onDidChangeVisibility(e => {
+		sessionsCommandsProvider.refresh();
+	});
+	sessionsCommandsProvider.refresh();
+	context.subscriptions.push(visibilityListener); // Add listener disposable to subscriptions
+	const refreshIntervalMs = 1000;
+	const debugStartListener = vscode.debug.onDidStartDebugSession(debugSession => {
+		periodicRefreshIntervalId = setInterval(() => {
+			if (treeView.visible) {
+				sessionsCommandsProvider.refresh();
+			}
+		}, refreshIntervalMs);
+		sessionsCommandsProvider.refresh();
+	});
+
+	const debugStopListener = vscode.debug.onDidTerminateDebugSession(debugSession => {
+		clearInterval(periodicRefreshIntervalId);
+	});
+	// Add the listener disposable to subscriptions for cleanup
+	context.subscriptions.push(debugStartListener);
+	context.subscriptions.push(debugStopListener);
 	const refreshCommand = vscode.commands.registerCommand('sessionsCommandsExplorer.refresh', () => sessionsCommandsProvider.refresh());
 
 	context.subscriptions.push(
@@ -197,17 +226,20 @@ export function activate(context: vscode.ExtensionContext, breakpointSessionsMap
 			debugSession.customRequest('pause', { sessionId: sessionId });
 		})
 	);
-	
+
 	context.subscriptions.push(
 		vscode.commands.registerCommand('sessionsCommandsExplorer.continueSession', (item: SessionItem) => {
 			const sessionId = item.sessionId;
 			vscode.window.showInformationMessage(`Trying to continue session: ${sessionId}`);
 			const debugSession = vscode.debug.activeDebugSession;
 			debugSession.customRequest('continue', { sessionId: sessionId });
-			
+
 		})
-	);	
+	);
 	context.subscriptions.push(refreshCommand);
+
+
+
 }
 
 export function deactivate() { }

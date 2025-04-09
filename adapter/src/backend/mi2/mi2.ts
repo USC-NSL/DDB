@@ -21,39 +21,39 @@ function couldBeOutput(line: string) {
 	return true;
 }
 
-const trace = false;
-function pollServiceUntilReady(endpoint, maxAttempts = 30, interval = 1000):Promise<void> {
+const trace = true;
+function pollServiceUntilReady(endpoint, maxAttempts = 30, interval = 1000): Promise<void> {
 	return new Promise((resolve, reject) => {
-	  let attempts = 0;
-  
-	  const checkStatus = () => {
-		axios.get(endpoint)
-		  .then(response => {
-			if (response.data.status === "up") {
-			  console.log("Service is ready!");
-			  resolve();
-			} else {
-			  attempts++;
-			  if (attempts >= maxAttempts) {
-				reject(new Error("Max attempts reached. Service not ready."));
-			  } else {
-				setTimeout(checkStatus, interval);
-			  }
-			}
-		  })
-		  .catch(error => {
-			attempts++;
-			if (attempts >= maxAttempts) {
-			  reject(error);
-			} else {
-			  setTimeout(checkStatus, interval);
-			}
-		  });
-	  };
-  
-	  checkStatus();
+		let attempts = 0;
+
+		const checkStatus = () => {
+			axios.get(endpoint)
+				.then(response => {
+					if (response.data.status === "up") {
+						console.log("Service is ready!");
+						resolve();
+					} else {
+						attempts++;
+						if (attempts >= maxAttempts) {
+							reject(new Error("Max attempts reached. Service not ready."));
+						} else {
+							setTimeout(checkStatus, interval);
+						}
+					}
+				})
+				.catch(error => {
+					attempts++;
+					if (attempts >= maxAttempts) {
+						reject(error);
+					} else {
+						setTimeout(checkStatus, interval);
+					}
+				});
+		};
+
+		checkStatus();
 	});
-  }
+}
 class LogMessage {
 	protected logMsgVar = "";
 	protected logMsgVarProcess = "";
@@ -63,20 +63,20 @@ class LogMessage {
 	protected logReplaceTest = /{([^}]*)}/g;
 	public logMsgBrkList: Breakpoint[] = [];
 
-	logMsgOutput(record:any){
+	logMsgOutput(record: any) {
 		if ((record.type === 'console')) {
-			if(record.content.startsWith("$")){
+			if (record.content.startsWith("$")) {
 				const content = record.content;
 				const variableMatch = this.logMsgMatch.exec(content);
 				if (variableMatch) {
 					const value = content.substr(variableMatch[1].length).trim();
 					this.logMsgRplItem.push(value);
 					this.logMsgRplNum--;
-					if(this.logMsgRplNum == 0){
-						for(let i = 0; i < this.logMsgRplItem.length; i++){
+					if (this.logMsgRplNum == 0) {
+						for (let i = 0; i < this.logMsgRplItem.length; i++) {
 							this.logMsgVarProcess = this.logMsgVarProcess.replace("placeHolderForVariable", this.logMsgRplItem[i]);
 						}
-						return "Log Message:"  + this.logMsgVarProcess;
+						return "Log Message:" + this.logMsgVarProcess;
 					}
 				}
 			}
@@ -84,9 +84,9 @@ class LogMessage {
 		}
 	}
 
-	logMsgProcess(parsed:MINode){
-		this.logMsgBrkList.forEach((brk)=>{
-			if(parsed.outOfBandRecord[0].output[0][1] == "breakpoint-hit" && parsed.outOfBandRecord[0].output[2][1] == brk.id){
+	logMsgProcess(parsed: MINode) {
+		this.logMsgBrkList.forEach((brk) => {
+			if (parsed.outOfBandRecord[0].output[0][1] == "breakpoint-hit" && parsed.outOfBandRecord[0].output[2][1] == brk.id) {
 				this.logMsgVar = brk?.logMessage;
 				const matches = this.logMsgVar.match(this.logReplaceTest);
 				const count = matches ? matches.length : 0;
@@ -121,7 +121,7 @@ export class MI2 extends EventEmitter implements IBackend {
 			this.procEnv = env;
 		}
 	}
-	protected logMessage:LogMessage = new LogMessage;
+	protected logMessage: LogMessage = new LogMessage;
 
 	load(cwd: string, target: string, procArgs: string, separateConsole: string, autorun: string[]): Thenable<any> {
 		// if (!path.isAbsolute(target))
@@ -139,7 +139,7 @@ export class MI2 extends EventEmitter implements IBackend {
 			this.process.on("error", err => this.emit("launcherror", err));
 			// const promises = this.initCommands(target, cwd);
 			const promises = []
-			promises.push(pollServiceUntilReady("http://localhost:5000/status"));
+			promises.push(pollServiceUntilReady("http://localhost:5004/status"));
 			Promise.all(promises).then(() => {
 				this.emit("debug-ready");
 				resolve(undefined);
@@ -324,7 +324,7 @@ export class MI2 extends EventEmitter implements IBackend {
 		const lines = str.split('\n');
 		let miOutputStarted = false;
 		lines.forEach(line => {
-			console.log("raw Line:", line);
+			// console.log("raw Line:", line);
 			// if (couldBeOutput(line)) {
 			// 	// if (!gdbMatch.exec(line))
 			// 	// 	this.log("stdout", line);
@@ -332,115 +332,115 @@ export class MI2 extends EventEmitter implements IBackend {
 			// if (line.trim() == "(ddb)") {
 			// 	miOutputStarted = true;
 			// } else if (miOutputStarted) {
-				console.log("parsing line:", ` ${line}`);
-				const parsed = parseMI(line);
-				if (this.debugOutput)
-					this.log("log", "GDB -> App: " + JSON.stringify(parsed));
-				let handled = false;
-				if (parsed.token !== undefined) {
-					if (this.handlers[parsed.token]) {
-						this.handlers[parsed.token](parsed);
-						delete this.handlers[parsed.token];
-						handled = true;
-					}
+			console.log("parsing line:", ` ${line}`);
+			const parsed = parseMI(line);
+			if (this.debugOutput)
+				this.log("log", "GDB -> App: " + JSON.stringify(parsed));
+			let handled = false;
+			if (parsed.token !== undefined) {
+				if (this.handlers[parsed.token]) {
+					this.handlers[parsed.token](parsed);
+					delete this.handlers[parsed.token];
+					handled = true;
 				}
-				if (!handled && parsed.resultRecords && parsed.resultRecords.resultClass == "error") {
-					this.log("stderr", parsed.result("msg") || line);
-				}
-				if (parsed.outOfBandRecord.length > 0) {
-					parsed.outOfBandRecord.forEach(record => {
-						if (record.isStream) {
-							this.log(record.type, record.content);
-							const logOutput = this.logMessage.logMsgOutput(record);
-							if(logOutput){
-								this.log("console", logOutput);
-							}
-						} else {
-							if (record.type == "exec") {
-								this.emit("exec-async-output", parsed);
-								if (record.asyncClass == "running")
-									this.emit("running", record);
-								else if (record.asyncClass == "stopped") {
-									const reason = parsed.record("reason");
-									if (reason === undefined) {
-										if (trace)
-											this.log("stderr", "stop (no reason given)");
-										// attaching to a process stops, but does not provide a reason
-										// also python generated interrupt seems to only produce this
-										this.emit("step-other", parsed);
-									} else {
-										if (trace)
-											this.log("stderr", "stop: " + reason);
-										switch (reason) {
-											case "breakpoint-hit":
-												this.emit("breakpoint", parsed);
-												this.logMessage.logMsgProcess(parsed);
-												break;
-											case "watchpoint-trigger":
-											case "read-watchpoint-trigger":
-											case "access-watchpoint-trigger":
-												this.emit("watchpoint", parsed);
-												break;
-											case "function-finished":
-											// identical result → send step-end
-											// this.emit("step-out-end", parsed);
-											// break;
-											case "location-reached":
-											case "end-stepping-range":
-												this.emit("step-end", parsed);
-												break;
-											case "watchpoint-scope":
-											case "solib-event":
-											case "syscall-entry":
-											case "syscall-return":
-												// TODO: inform the user
-												this.emit("step-end", parsed);
-												break;
-											case "fork":
-											case "vfork":
-											case "exec":
-												// TODO: inform the user, possibly add second inferior
-												this.emit("step-end", parsed);
-												break;
-											case "signal-received":
-												this.emit("signal-stop", parsed);
-												break;
-											// case "exited-normally":
-											// 	this.emit("exited-normally", parsed);
-											// 	break;
-											// case "exited": // exit with error code != 0
-											// 	this.log("stderr", "Program exited with code " + parsed.record("exit-code"));
-											// 	this.emit("exited-normally", parsed);
-											// 	break;
-											// case "exited-signalled":	// consider handling that explicit possible
-											// 	this.log("stderr", "Program exited because of signal " + parsed.record("signal"));
-											// 	this.emit("stopped", parsed);
-											// 	break;
+			}
+			if (!handled && parsed.resultRecords && parsed.resultRecords.resultClass == "error") {
+				this.log("stderr", parsed.result("msg") || line);
+			}
+			if (parsed.outOfBandRecord.length > 0) {
+				parsed.outOfBandRecord.forEach(record => {
+					if (record.isStream) {
+						this.log(record.type, record.content);
+						const logOutput = this.logMessage.logMsgOutput(record);
+						if (logOutput) {
+							this.log("console", logOutput);
+						}
+					} else {
+						if (record.type == "exec") {
+							this.emit("exec-async-output", parsed);
+							if (record.asyncClass == "running")
+								this.emit("running", record);
+							else if (record.asyncClass == "stopped") {
+								const reason = parsed.record("reason");
+								if (reason === undefined) {
+									if (trace)
+										this.log("stderr", "stop (no reason given)");
+									// attaching to a process stops, but does not provide a reason
+									// also python generated interrupt seems to only produce this
+									this.emit("step-other", parsed);
+								} else {
+									if (trace)
+										this.log("stderr", "stop: " + reason);
+									switch (reason) {
+										case "breakpoint-hit":
+											this.emit("breakpoint", parsed);
+											this.logMessage.logMsgProcess(parsed);
+											break;
+										case "watchpoint-trigger":
+										case "read-watchpoint-trigger":
+										case "access-watchpoint-trigger":
+											this.emit("watchpoint", parsed);
+											break;
+										case "function-finished":
+										// identical result → send step-end
+										// this.emit("step-out-end", parsed);
+										// break;
+										case "location-reached":
+										case "end-stepping-range":
+											this.emit("step-end", parsed);
+											break;
+										case "watchpoint-scope":
+										case "solib-event":
+										case "syscall-entry":
+										case "syscall-return":
+											// TODO: inform the user
+											this.emit("step-end", parsed);
+											break;
+										case "fork":
+										case "vfork":
+										case "exec":
+											// TODO: inform the user, possibly add second inferior
+											this.emit("step-end", parsed);
+											break;
+										case "signal-received":
+											this.emit("signal-stop", parsed);
+											break;
+										// case "exited-normally":
+										// 	this.emit("exited-normally", parsed);
+										// 	break;
+										// case "exited": // exit with error code != 0
+										// 	this.log("stderr", "Program exited with code " + parsed.record("exit-code"));
+										// 	this.emit("exited-normally", parsed);
+										// 	break;
+										// case "exited-signalled":	// consider handling that explicit possible
+										// 	this.log("stderr", "Program exited because of signal " + parsed.record("signal"));
+										// 	this.emit("stopped", parsed);
+										// 	break;
 
-											default:
-												this.log("console", "Not implemented stop reason (assuming exception): " + reason);
-												this.emit("stopped", parsed);
-												break;
-										}
+										default:
+											this.log("console", "Not implemented stop reason (assuming exception): " + reason);
+											this.emit("stopped", parsed);
+											break;
 									}
-								} else
-									this.log("log", JSON.stringify(parsed));
-							} else if (record.type == "notify") {
-								if (record.asyncClass == "thread-created") {
-									this.emit("thread-created", parsed);
-								} else if (record.asyncClass == "thread-exited") {
-									this.emit("thread-exited", parsed);
 								}
+							} else
+								this.log("log", JSON.stringify(parsed));
+						} else if (record.type == "notify") {
+							if (record.asyncClass == "thread-created") {
+								this.emit("thread-created", parsed);
+							} else if (record.asyncClass == "thread-exited") {
+								this.emit("thread-exited", parsed);
 							}
 						}
-					});
-					handled = true;
-				}
-				if (parsed.token == undefined && parsed.resultRecords == undefined && parsed.outOfBandRecord.length == 0)
-					handled = true;
-				if (!handled)
-					this.log("log", "Unhandled: " + JSON.stringify(parsed));
-				miOutputStarted = false
+					}
+				});
+				handled = true;
+			}
+			if (parsed.token == undefined && parsed.resultRecords == undefined && parsed.outOfBandRecord.length == 0)
+				handled = true;
+			if (!handled)
+				this.log("log", "Unhandled: " + JSON.stringify(parsed));
+			miOutputStarted = false
 			// }
 		});
 	}
@@ -590,6 +590,7 @@ export class MI2 extends EventEmitter implements IBackend {
 	loadBreakPoints(breakpoints: Breakpoint[]): Thenable<[boolean, Breakpoint][]> {
 		if (trace)
 			this.log("stderr", "loadBreakPoints");
+		console.log("loadBreakPoints", breakpoints)
 		const promisses: Thenable<any>[] = [];
 		breakpoints.forEach(breakpoint => {
 			promisses.push(this.addBreakPoint(breakpoint));
@@ -597,16 +598,16 @@ export class MI2 extends EventEmitter implements IBackend {
 		return Promise.all(promisses);
 	}
 
-	setBreakPointCondition(bkptNum: number, condition: string, sessionId:string): Thenable<any> {
+	setBreakPointCondition(bkptNum: number, condition: string, sessionId: string): Thenable<any> {
 		if (trace)
 			this.log("stderr", "setBreakPointCondition");
 		return this.sendCommand("break-condition " + bkptNum + " " + condition + " --session " + sessionId);
 	}
 
-	setLogPoint(bkptNum:number, command:string, sessionId:string): Thenable<any> {
+	setLogPoint(bkptNum: number, command: string, sessionId: string): Thenable<any> {
 		const regex = /{([a-z0-9A-Z-_\.\>\&\*\[\]]*)}/gm;
-		let m:RegExpExecArray;
-		let commands:string = "";
+		let m: RegExpExecArray;
+		let commands: string = "";
 
 		while ((m = regex.exec(command))) {
 			if (m.index === regex.lastIndex) {
@@ -841,7 +842,7 @@ export class MI2 extends EventEmitter implements IBackend {
 						if (!this.breakpoints.has(bkptPathLineId)) {
 							this.breakpoints.set(newBrk.file, new Map());
 						}
-		
+
 						// Handle condition
 						if (breakpoint.condition) {
 							const condResult = await this.setBreakPointCondition(bkptNum, breakpoint.condition, sessionId);
@@ -849,7 +850,7 @@ export class MI2 extends EventEmitter implements IBackend {
 								throw new Error(`Failed to set condition for breakpoint ${bkptNum}`);
 							}
 						}
-		
+
 						// Handle log message
 						if (breakpoint.logMessage) {
 							const logResult = await this.setLogPoint(bkptNum, breakpoint.logMessage, sessionId);
@@ -857,7 +858,7 @@ export class MI2 extends EventEmitter implements IBackend {
 								throw new Error(`Failed to set log message for breakpoint ${bkptNum}`);
 							}
 						}
-		
+
 						this.breakpoints.get(bkptPathLineId).set(sessionId, newBrk);
 						return { success: true, sessionId, newBrk };
 					} else {
@@ -874,45 +875,45 @@ export class MI2 extends EventEmitter implements IBackend {
 		breakpoint.sessionIds = successfulResults.map(result => result.sessionId);
 		return breakpoint;
 	}
-			
-		
-			
-	
-	
+
+
+
+
+
 	async removeSingleBreakPoint(breakpoint: SingleBreakpoint): Promise<boolean> {
 		if (trace) {
 			this.log("stderr", "removeBreakPoint");
 		}
-	
-		if (!this.breakpoints.has(this.generateBreakpointId(breakpoint.file,breakpoint.line))) {
+
+		if (!this.breakpoints.has(this.generateBreakpointId(breakpoint.file, breakpoint.line))) {
 			return false;
 		}
 		return this.sendCommand("break-delete " + breakpoint.id + " --session " + breakpoint.sessionId).then((result) => {
-				if (result.resultRecords.resultClass === "done") {
-					this.breakpoints.get(this.generateBreakpointId(breakpoint.file,breakpoint.line))?.delete(breakpoint.sessionId);
-					const bkpts = this.breakpoints.get(this.generateBreakpointId(breakpoint.file,breakpoint.line));
-					if(bkpts && bkpts.size === 0){
-						this.breakpoints.delete(this.generateBreakpointId(breakpoint.file,breakpoint.line));
-					}
-					return true;
-				} else {
-					return false;
+			if (result.resultRecords.resultClass === "done") {
+				this.breakpoints.get(this.generateBreakpointId(breakpoint.file, breakpoint.line))?.delete(breakpoint.sessionId);
+				const bkpts = this.breakpoints.get(this.generateBreakpointId(breakpoint.file, breakpoint.line));
+				if (bkpts && bkpts.size === 0) {
+					this.breakpoints.delete(this.generateBreakpointId(breakpoint.file, breakpoint.line));
 				}
+				return true;
+			} else {
+				return false;
+			}
 		})
 	}
 	async removeBreakPoint(breakpoint: Breakpoint): Promise<boolean> {
 		if (trace) {
 			this.log("stderr", "removeBreakPoint");
 		}
-	
+
 		const promises = []
-		if (!this.breakpoints.has(this.generateBreakpointId(breakpoint.file,breakpoint.line))) {
+		if (!this.breakpoints.has(this.generateBreakpointId(breakpoint.file, breakpoint.line))) {
 			return false;
 		}
-		this.breakpoints.get(this.generateBreakpointId(breakpoint.file,breakpoint.line)).forEach((bkpt, _) => {
+		this.breakpoints.get(this.generateBreakpointId(breakpoint.file, breakpoint.line)).forEach((bkpt, _) => {
 			promises.push(this.sendCommand("break-delete " + bkpt.id + " --session " + bkpt.sessionId).then((result) => {
 				if (result.resultRecords.resultClass === "done") {
-					this.breakpoints.delete(this.generateBreakpointId(breakpoint.file,breakpoint.line));
+					this.breakpoints.delete(this.generateBreakpointId(breakpoint.file, breakpoint.line));
 					return true;
 				} else {
 					return false;
@@ -931,21 +932,21 @@ export class MI2 extends EventEmitter implements IBackend {
 	clearBreakPoints(source?: string): Thenable<any> {
 		if (trace)
 			this.log("stderr", "clearBreakPoints");
-			const promises=[]
-			this.breakpoints.forEach((bkpts, pathId) => {
-				if (pathId.startsWith(source)) {
-					bkpts.forEach((bkpt, _) => {
-						promises.push(this.sendCommand("break-delete " + bkpt.id + " --session "+ bkpt.sessionId).then((result) => {
-							if (result.resultRecords.resultClass == "done") {
-								this.breakpoints.delete(pathId);
-								return true;
-							} else {
-								return false;
-							}
-						}));
-					});
-				} 
-			});
+		const promises = []
+		this.breakpoints.forEach((bkpts, pathId) => {
+			if (pathId.startsWith(source)) {
+				bkpts.forEach((bkpt, _) => {
+					promises.push(this.sendCommand("break-delete " + bkpt.id + " --session " + bkpt.sessionId).then((result) => {
+						if (result.resultRecords.resultClass == "done") {
+							this.breakpoints.delete(pathId);
+							return true;
+						} else {
+							return false;
+						}
+					}));
+				});
+			}
+		});
 		return Promise.all(promises)
 	}
 
@@ -991,7 +992,7 @@ export class MI2 extends EventEmitter implements IBackend {
 		// const result = await this.sendCommand(["stack-list-frames"].concat(options).join(" "));
 		const result = await this.sendCommand(`bt-remote --thread ${thread}`);
 		const stack = result.result("stack");
-		
+
 		return stack.map((element: any) => {
 			const level = MINode.valueOf(element, "level");
 			const addr = MINode.valueOf(element, "addr");
@@ -1032,7 +1033,7 @@ export class MI2 extends EventEmitter implements IBackend {
 		});
 	}
 	// @ts-ignore
-	async getStackVariables(thread: number, frame: number, session:number): Promise<Variable[]> {
+	async getStackVariables(thread: number, frame: number, session: number): Promise<Variable[]> {
 		if (trace)
 			this.log("stderr", "getStackVariables");
 
@@ -1119,7 +1120,7 @@ export class MI2 extends EventEmitter implements IBackend {
 		});
 	}
 	//@ts-ignore
-	async evalExpression(name: string, thread: number, frame: number, session:number): Promise<MINode> {
+	async evalExpression(name: string, thread: number, frame: number, session: number): Promise<MINode> {
 		if (trace)
 			this.log("stderr", "evalExpression");
 
@@ -1140,7 +1141,7 @@ export class MI2 extends EventEmitter implements IBackend {
 			miCommand += `--thread ${threadId} --frame ${frameLevel}`;
 		}
 		const res = await this.sendCommand(`${miCommand} ${this.quote(name)} ${frame} "${expression}"`);
-		return new VariableObject(res.result(""),threadId);
+		return new VariableObject(res.result(""), threadId);
 	}
 
 	async varEvalExpression(name: string): Promise<MINode> {
@@ -1153,7 +1154,7 @@ export class MI2 extends EventEmitter implements IBackend {
 		if (trace)
 			this.log("stderr", "varListChildren");
 		//TODO: add `from` and `to` arguments
-		let miCommand="var-list-children "
+		let miCommand = "var-list-children "
 		if (threadId != 0) {
 			miCommand += `--thread ${threadId}`;
 		}
@@ -1163,11 +1164,11 @@ export class MI2 extends EventEmitter implements IBackend {
 		return omg;
 	}
 
-	async varUpdate(threadId: number, frameLevel: number,name: string = "*"): Promise<MINode> {
+	async varUpdate(threadId: number, frameLevel: number, name: string = "*"): Promise<MINode> {
 		if (trace)
 			this.log("stderr", "varUpdate");
 		let miCommand = "var-update ";
-		if (threadId!=0){
+		if (threadId != 0) {
 			miCommand += `--thread ${threadId} --frame ${frameLevel}`;
 		}
 		return this.sendCommand(`${miCommand} --all-values ${this.quote(name)}`);
@@ -1250,7 +1251,7 @@ export class MI2 extends EventEmitter implements IBackend {
 	protected currentToken: number = 1;
 	protected handlers: { [index: number]: (info: MINode) => any } = {};
 	// path+line ->single breakpoints
-	public breakpoints:  Map<string, Map<string, SingleBreakpoint>> = new Map();
+	public breakpoints: Map<string, Map<string, SingleBreakpoint>> = new Map();
 	protected buffer: string;
 	protected errbuf: string;
 	protected process: ChildProcess.ChildProcess;
@@ -1262,52 +1263,52 @@ export class MI2 extends EventEmitter implements IBackend {
 type ThreadFrameKey = {
 	thread: string;
 	frame: string;
-  };
-  
-  type SessionThreadFrame = {
+};
+
+type SessionThreadFrame = {
 	session: string;
 	thread: string;
 	frame: string;
-  };
-  
-  class ThreadFrameMapper {
+};
+
+class ThreadFrameMapper {
 	private map: Map<string, SessionThreadFrame>;
-  
+
 	constructor() {
-	  this.map = new Map<string, SessionThreadFrame>();
+		this.map = new Map<string, SessionThreadFrame>();
 	}
-  
+
 	private getKey(key: ThreadFrameKey): string {
-	  return `${key.thread}|${key.frame}`;
+		return `${key.thread}|${key.frame}`;
 	}
-  
+
 	set(from: ThreadFrameKey, to: SessionThreadFrame): void {
-	  const key = this.getKey(from);
-	  this.map.set(key, to);
+		const key = this.getKey(from);
+		this.map.set(key, to);
 	}
-  
+
 	get(key: ThreadFrameKey): SessionThreadFrame | undefined {
-	  const mapKey = this.getKey(key);
-	  return this.map.get(mapKey);
+		const mapKey = this.getKey(key);
+		return this.map.get(mapKey);
 	}
-  
+
 	has(key: ThreadFrameKey): boolean {
-	  const mapKey = this.getKey(key);
-	  return this.map.has(mapKey);
+		const mapKey = this.getKey(key);
+		return this.map.has(mapKey);
 	}
-  
+
 	delete(key: ThreadFrameKey): boolean {
-	  const mapKey = this.getKey(key);
-	  return this.map.delete(mapKey);
+		const mapKey = this.getKey(key);
+		return this.map.delete(mapKey);
 	}
-  
+
 	getAllMappings(): Array<{ from: ThreadFrameKey; to: SessionThreadFrame }> {
-	  return Array.from(this.map.entries()).map(([key, value]) => {
-		const [thread, frame] = key.split('|');
-		return {
-		  from: { thread, frame },
-		  to: value
-		};
-	  });
+		return Array.from(this.map.entries()).map(([key, value]) => {
+			const [thread, frame] = key.split('|');
+			return {
+				from: { thread, frame },
+				to: value
+			};
+		});
 	}
-  }
+}
