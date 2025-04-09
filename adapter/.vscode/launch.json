@@ -20,17 +20,21 @@
 			"name": "code-debug server",
 			"type": "node",
 			"request": "launch",
-			"runtimeArgs": [ "--nolazy" ],
+			"runtimeArgs": [
+				"--nolazy"
+			],
 			"program": "${workspaceRoot}/src/gdb.ts",
 			"stopOnEntry": false,
-			"args": [ "--server=4711" ],
+			"args": [
+				"--server=4712"
+			],
 			"sourceMaps": true,
 			"outFiles": [
 				"${workspaceRoot}/out/**/*.js"
 			],
 			"cwd": "${workspaceRoot}",
 			"preLaunchTask": "compile",
-			"runtimeExecutable": "${env:HOME}/.nvm/versions/node/v22.12.0/bin/node"
+			"runtimeExecutable": "/home/junzhouh/.nvm/versions/node/v22.11.0/bin/node"
 		},
 		{
 			"name": "Launch Tests",
@@ -52,7 +56,10 @@
 	"compounds": [
 		{
 			"name": "Extension Debugging (Extension + Debug Server)",
-			"configurations": ["Launch Extension", "code-debug server"]
+			"configurations": [
+				"Launch Extension",
+				"code-debug server"
+			]
 		},
 	]
 }
