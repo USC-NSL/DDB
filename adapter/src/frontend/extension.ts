@@ -69,7 +69,7 @@ function associateBreakpointWithSessions(bp: vscode.Breakpoint, sessionIds: stri
 }
 
 async function getAvailableSessions(): Promise<any[]> {
-	const apiBaseUrl = "http://localhost:5000"
+	const apiBaseUrl = process.env.SESSIONS_COMMANDS_API_URL || 'http://localhost:5000';
 	try {
 		const response = await axios.get(`${apiBaseUrl}/sessions`);
 		return response.data; // Adjust according to your API's response format
@@ -127,24 +127,33 @@ declare module 'vscode' {
 }
 async function handleSetBreakpoints(message: any) {
 	console.log("Handling setBreakpoints message: ", message);
+	console.log("debug0", message.arguments)
 	const messageArguments = message.arguments as DebugProtocol.SetBreakpointsArguments;
 	const breakpoints = messageArguments.breakpoints
 	const source = message.arguments.source;
 	const breakpointsToRemove = [];
+	console.log("debug1", breakpoints)
 	for (const bp of breakpoints) {
 		// Check if the breakpoint already has session IDs
 		const bkptLinePathId = getBreakpointIdFromDAP(bp, source.path);
-		const sessions = breakpointSessionsMap.get(bkptLinePathId);
-		if (sessions?.length == 0) {
-			let selectedSessions = await promptForSessions();
-			if (selectedSessions?.length === 0) {
-				selectedSessions = await getAvailableSessions();
-			}
-			if (selectedSessions?.length !== 0) {
-				breakpointSessionsMap.set(bkptLinePathId, selectedSessions.map(s => s.sessionId));
-			}
+		if (!breakpointSessionsMap.has(bkptLinePathId)) {
+			breakpointSessionsMap.set(bkptLinePathId, []);
 		}
-		bp.sessionIds = breakpointSessionsMap.get(bkptLinePathId);
+		let sessionIdsToAssign = breakpointSessionsMap.get(bkptLinePathId);
+		if (!sessionIdsToAssign || sessionIdsToAssign.length === 0) {
+			let selectedSessions = await promptForSessions();
+			console.log("debug2", selectedSessions)
+			if (!selectedSessions || selectedSessions?.length === 0) {
+				selectedSessions = await getAvailableSessions();
+				console.log("debug3", selectedSessions)
+			}
+			sessionIdsToAssign = selectedSessions ? selectedSessions.map(s => s.sessionId) : [];
+
+			// Update the map with the determined session IDs (even if it's an empty list)
+			breakpointSessionsMap.set(bkptLinePathId, sessionIdsToAssign);
+		}
+		console.log("debug4", sessionIdsToAssign)
+		bp.sessionIds = sessionIdsToAssign;
 	}
 	updateInlineDecorations();
 	// Send the modified setBreakpoints request to the debug adapter
@@ -279,6 +288,7 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 	context.subscriptions.push(disposable);
 	vscode.debug.onDidStartDebugSession((session) => {
+		console.log("Debug session started: ", session);
 		breakpointSessionsMap.clear();
 		breakpointSessionsMapExp.clear();
 	})
