@@ -12,6 +12,10 @@
 				"${workspaceFolder}/../apps"
 			],
 			"sourceMaps": true,
+			"env": {
+				"TRACE": "true",
+				"SESSIONS_COMMANDS_API_URL": "http://localhost:5004"
+			},
 			"outFiles": [
 				"${workspaceRoot}/out/**/*.js"
 			],
@@ -32,6 +36,10 @@
 			"outFiles": [
 				"${workspaceRoot}/out/**/*.js"
 			],
+			"env": {
+				"TRACE": "true",
+				"SESSIONS_COMMANDS_API_URL": "http://localhost:5004"
+			},
 			"cwd": "${workspaceRoot}",
 			"preLaunchTask": "compile",
 			"runtimeExecutable": "/home/junzhouh/.nvm/versions/node/v22.11.0/bin/node"
