@@ -1,20 +1,32 @@
 // A launch configuration that compiles the extension and then opens it inside a new window
 {
 	"version": "0.2.0",
+	"inputs": [
+		{
+			"id": "debugServerPort",
+			"type": "pickString",
+			"description": "Debug server port",
+			"options": [
+				"4711",
+				"4712",
+				"4713",
+			],
+			"default": "4711"
+		}
+	],
 	"configurations": [
 		{
 			"name": "Launch Extension",
 			"type": "extensionHost",
 			"request": "launch",
-			// "runtimeExecutable": "${execPath}",
 			"args": [
 				"--extensionDevelopmentPath=${workspaceFolder}",
 				"${workspaceFolder}/../apps"
 			],
 			"sourceMaps": true,
 			"env": {
-				"TRACE": "true",
-				"SESSIONS_COMMANDS_API_URL": "http://localhost:5004"
+				// "TRACE": "true",
+				// "SESSIONS_COMMANDS_API_URL": "http://localhost:5004"
 			},
 			"outFiles": [
 				"${workspaceRoot}/out/**/*.js"
@@ -30,15 +42,15 @@
 			"program": "${workspaceRoot}/src/gdb.ts",
 			"stopOnEntry": false,
 			"args": [
-				"--server=4712"
+				"--server=${input:debugServerPort}"
 			],
 			"sourceMaps": true,
 			"outFiles": [
 				"${workspaceRoot}/out/**/*.js"
 			],
 			"env": {
-				"TRACE": "true",
-				"SESSIONS_COMMANDS_API_URL": "http://localhost:5004"
+				// "TRACE": "true",
+				// "SESSIONS_COMMANDS_API_URL": "http://localhost:5004"
 			},
 			"cwd": "${workspaceRoot}",
 			"preLaunchTask": "compile",

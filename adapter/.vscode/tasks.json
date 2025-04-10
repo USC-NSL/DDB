@@ -115,5 +115,5 @@
 			"group": "build",
 			"args": ["run", "prettier-write-docs"]
 		}
-	]
+	],
 }
