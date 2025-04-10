@@ -15,7 +15,7 @@ import { setFlagsFromString } from 'v8';
 import { Debugger } from 'inspector';
 import { send } from 'process';
 
-const trace = true;
+const trace = process.env.TRACE?.toLowerCase() === 'true';
 class ExtendedVariable {
 	constructor(public name: string, public options: { "arg": any }) {
 	}

@@ -21,7 +21,7 @@ function couldBeOutput(line: string) {
 	return true;
 }
 
-const trace = true;
+const trace = process.env.TRACE?.toLowerCase() === 'true';
 function pollServiceUntilReady(endpoint, maxAttempts = 30, interval = 1000): Promise<void> {
 	return new Promise((resolve, reject) => {
 		let attempts = 0;
