@@ -14,7 +14,7 @@ import { SourceFileMap } from "./source_file_map";
 import { setFlagsFromString } from 'v8';
 import { Debugger } from 'inspector';
 import { send } from 'process';
-
+import { cloneDeep } from 'lodash';
 const trace = process.env.TRACE?.toLowerCase() === 'true';
 class ExtendedVariable {
 	constructor(public name: string, public options: { "arg": any }) {
@@ -366,22 +366,6 @@ export class MI2DebugSession extends DebugSession {
 			let sessionresponse = response as DebugProtocol.SetBreakpointsResponse;
 			let path = bkptArgs.source.path;
 			let transactionId = bkptArgs.transactionId;
-			// const requestedBreakpoints = 
-
-			// sessionresponse.body = {
-			// 	breakpoints: bkptArgs.breakpoints.map(brk => ({
-			// 		verified: false,
-			// 		source: bkptArgs.source,
-			// 		line: brk.line,
-			// 		sessionIds: ["1","2"]
-
-			// 	}))
-
-			// }
-			// this.bkptRequests[args.seq][0](sessionresponse);
-			// this.sendResponse(sessionresponse);
-			// return;
-			//delete all breakpoints that are not in the requestedBreakpoints
 			if (bkptArgs.sourceModified) {
 				await this.miDebugger.clearBreakPoints(path);
 			}
@@ -446,7 +430,10 @@ export class MI2DebugSession extends DebugSession {
 					line: this.miDebugger.getLineFromBreakpointId(bkptId),
 					verified: sessionIds.size > 0,
 					sessionIds: Array.from(sessionIds.keys()),
-					source: bkptArgs.source,
+					source: {
+						name: this.miDebugger.getFileFromBreakpointId(bkptId).split("/").pop(),
+						path: this.miDebugger.getFileFromBreakpointId(bkptId),
+					},
 				};
 				allResponse.push(breakpoint);
 
@@ -454,16 +441,16 @@ export class MI2DebugSession extends DebugSession {
 					breakpointsResponse.push(breakpoint);
 				}
 			}
-
+			const bkptResponse = cloneDeep(sessionresponse)
 			sessionresponse.body = {
 				breakpoints: breakpointsResponse
 			}
 			this.bkptRequests[request.arguments.seq][0](sessionresponse);
-			sessionresponse.body = {
+			bkptResponse.body = {
 				breakpoints: allResponse
 			}
-			sessionresponse.transactionId = transactionId
-			this.sendResponse(sessionresponse);
+			bkptResponse.transactionId = transactionId
+			this.sendResponse(bkptResponse);
 		}
 		// continue
 		if (command == "continue") {
@@ -489,27 +476,15 @@ export class MI2DebugSession extends DebugSession {
 	private bkptmap = new Map<string, DebugProtocol.SourceBreakpoint[]>()
 	protected override setBreakPointsRequest(response: DebugProtocol.SetBreakpointsResponse, args: DebugProtocol.SetBreakpointsArguments): void {
 		if (trace)
-			this.miDebugger.log("stderr", `setBreakPointsRequest${JSON.stringify(args)}`)
-		// const path = args.source.path;
-		// if(args.breakpoints.length>0){
-		// 	this.bkptmap.set(path,args.breakpoints)
-		// }
-		// response.body={
-		// 	breakpoints:this.bkptmap.get(path).map((bkpt)=>{
-		// 		return {
-		// 			verified:true,
-		// 			line:bkpt.line
-		// 		}
-		// 	})
-		// }
-		// this.sendResponse(response);
-		// return;
+			this.miDebugger.log("stderr", `setBreakPointsRequest${JSON.stringify(args, null, 2)}`)
 		const waitForAysyncSession = new Promise<DebugProtocol.SetBreakpointsResponse>((resolve, reject) => {
 			this.bkptRequests[response.request_seq] = [resolve, reject];
 
 		})
 		waitForAysyncSession.then((cresponse) => {
 			response.body = cresponse.body;
+			if (trace)
+				this.miDebugger.log("stderr", `setBreakPointsRequest send response ${JSON.stringify(response, null, 2)}`)
 			this.sendResponse(response);
 		}, (error) => {
 			this.sendErrorResponse(response, 9, error.toString());

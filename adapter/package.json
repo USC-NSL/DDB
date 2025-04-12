@@ -45,15 +45,15 @@
 				"title": "Show Information Popup"
 			},
 			{
-                "command": "sessionsCommandsExplorer.pauseSession",
-                "title": "Pause Session",
-                "icon": "$(debug-pause)"
-            },
-            {
-                "command": "sessionsCommandsExplorer.continueSession",
-                "title": "Continue Session",
-                "icon": "$(debug-continue)"
-            }
+				"command": "sessionsCommandsExplorer.pauseSession",
+				"title": "Pause Session",
+				"icon": "$(debug-pause)"
+			},
+			{
+				"command": "sessionsCommandsExplorer.continueSession",
+				"title": "Continue Session",
+				"icon": "$(debug-continue)"
+			}
 		],
 		"breakpoints": [
 			{
@@ -608,17 +608,17 @@
 				}
 			],
 			"view/item/context": [
-            {
-                "command": "sessionsCommandsExplorer.pauseSession",
-                "when": "viewItem == sessionItem",
-                "group": "inline"
-            },
-            {
-                "command": "sessionsCommandsExplorer.continueSession",
-                "when": "viewItem == sessionItem",
-                "group": "inline"
-            }
-        ]
+				{
+					"command": "sessionsCommandsExplorer.pauseSession",
+					"when": "viewItem == sessionItem",
+					"group": "inline"
+				},
+				{
+					"command": "sessionsCommandsExplorer.continueSession",
+					"when": "viewItem == sessionItem",
+					"group": "inline"
+				}
+			]
 		}
 	},
 	"scripts": {
@@ -636,6 +636,7 @@
 	},
 	"dependencies": {
 		"axios": "^1.7.4",
+		"lodash": "^4.17.21",
 		"ssh2": "^1.6.0",
 		"vscode-debugadapter": "^1.45.0",
 		"vscode-debugprotocol": "^1.45.0"

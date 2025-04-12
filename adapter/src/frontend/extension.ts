@@ -160,6 +160,7 @@ async function handleSetBreakpoints(message: any) {
 	// message.arguments.breakpoints = message.arguments.breakpoints.filter(bp => !breakpointsToRemove.includes(bp));
 	const session = vscode.debug.activeDebugSession;
 	const response: DebugProtocol.SetBreakpointsResponse = await session.customRequest('setSessionBreakpoints', message);
+	console.log("debug5", JSON.stringify(response, null, 2))
 	// add sessionids to vscode breakpoints
 	for (const vscodebp of vscode.debug.breakpoints) {
 		if (vscodebp instanceof vscode.SourceBreakpoint) {

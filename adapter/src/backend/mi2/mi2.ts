@@ -930,6 +930,9 @@ export class MI2 extends EventEmitter implements IBackend {
 	getLineFromBreakpointId(id: string): number {
 		return parseInt(id.split("|||")[1]);
 	}
+	getFileFromBreakpointId(id: string): string {
+		return id.split("|||")[0];
+	}
 	clearBreakPoints(source?: string): Thenable<any> {
 		if (trace)
 			this.log("stderr", "clearBreakPoints");
