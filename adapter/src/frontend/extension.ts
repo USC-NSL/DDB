@@ -102,6 +102,10 @@ function convertToVSCodeBreakpoint(bp: any, source: any): vscode.Breakpoint {
 declare module 'vscode-debugprotocol' {
 	module DebugProtocol {
 		interface SourceBreakpoint {
+			source: {
+				path: string;
+				name: string;
+			};
 			sessionIds?: string[];
 			transactionId?: number;
 			sessionAliases?: string[];
@@ -177,7 +181,7 @@ async function handleSetBreakpoints(message: any) {
 	breakpointSessionsMapExp.clear();
 	//@ts-ignore
 	for (const bp of response.breakpoints) {
-		breakpointSessionsMapExp.set(getBreakpointIdFromDAP(bp, source.path), bp.sessionIds);
+		breakpointSessionsMapExp.set(getBreakpointIdFromDAP(bp, bp.source.path), bp.sessionIds);
 	}
 	updateInlineDecorations();
 }

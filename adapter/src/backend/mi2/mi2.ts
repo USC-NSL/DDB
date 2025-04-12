@@ -749,7 +749,7 @@ export class MI2 extends EventEmitter implements IBackend {
 					id: bkptNum,
 					file: breakpoint.file ? breakpoint.file : result.result("bkpt.file"),
 					raw: breakpoint.raw,
-					line: parseInt(result.result("bkpt.line"), 10),
+					line: breakpoint.line,
 					condition: breakpoint.condition,
 					logMessage: breakpoint.logMessage,
 					verified: true,

@@ -338,8 +338,10 @@ export class MI2DebugSession extends DebugSession {
 	}
 
 	protected override setFunctionBreakPointsRequest(response: DebugProtocol.SetFunctionBreakpointsResponse, args: DebugProtocol.SetFunctionBreakpointsArguments): void {
-		if (trace)
+		if (trace) {
 			this.miDebugger.log("stderr", `setFunctionBreakPointsRequest${JSON.stringify(args)}`)
+			this.miDebugger.log("stderr", `setFunctionBreakPointsRequestResponse${JSON.stringify(response)}`)
+		}
 		const all = [];
 		args.breakpoints.forEach(brk => {
 			all.push(this.miDebugger.addBreakPoint({ raw: brk.name, condition: brk.condition, countCondition: brk.hitCondition }));
@@ -445,7 +447,7 @@ export class MI2DebugSession extends DebugSession {
 			sessionresponse.body = {
 				breakpoints: breakpointsResponse
 			}
-			this.bkptRequests[request.arguments.seq][0](sessionresponse);
+			this.bkptRequests[args.seq][0](sessionresponse);
 			bkptResponse.body = {
 				breakpoints: allResponse
 			}
@@ -475,8 +477,10 @@ export class MI2DebugSession extends DebugSession {
 	private bkptRequests: Record<number, {}> = []
 	private bkptmap = new Map<string, DebugProtocol.SourceBreakpoint[]>()
 	protected override setBreakPointsRequest(response: DebugProtocol.SetBreakpointsResponse, args: DebugProtocol.SetBreakpointsArguments): void {
-		if (trace)
+		if (trace) {
 			this.miDebugger.log("stderr", `setBreakPointsRequest${JSON.stringify(args, null, 2)}`)
+			this.miDebugger.log("stderr", `setBreakPointsRequestResponse${JSON.stringify(response, null, 2)}`)
+		}
 		const waitForAysyncSession = new Promise<DebugProtocol.SetBreakpointsResponse>((resolve, reject) => {
 			this.bkptRequests[response.request_seq] = [resolve, reject];
 
